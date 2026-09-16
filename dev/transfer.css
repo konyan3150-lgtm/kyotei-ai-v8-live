@@ -1,0 +1,24 @@
+.transfer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.transfer button {
+  font-weight: 850;
+}
+
+.transferStatus {
+  margin-top: 7px;
+  color: #9db5c9;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.transferStatus.ok {
+  color: #72e7ad;
+}
+
+.transferStatus.err {
+  color: #ff8c8c;
+}
