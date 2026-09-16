@@ -1,0 +1,41 @@
+name: Update next-day race program
+
+on:
+  schedule:
+    # 16:05, 18:05, 20:05, 22:05 JST. The first run with published data wins;
+    # later runs safely refresh program changes.
+    - cron: "5 7,9,11,13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-next-day-program
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install parser dependencies
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4 lxml
+      - name: Fetch official next-day program
+        run: python scripts/fetch_tomorrow.py dev/tomorrow.json
+      - name: Commit changed program
+        run: |
+          if git diff --quiet -- dev/tomorrow.json; then
+            echo "Next-day program is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dev/tomorrow.json
+          git commit -m "chore: update next-day race program"
+          git push
