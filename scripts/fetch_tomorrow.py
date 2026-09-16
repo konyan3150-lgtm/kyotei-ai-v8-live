@@ -7,6 +7,7 @@ import json
 import re
 import sys
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,8 +17,9 @@ from bs4 import BeautifulSoup
 
 JST = timezone(timedelta(hours=9))
 BASE = "https://www.boatrace.jp/owpc/pc/race/racelist"
-VENUES = range(1, 25)
+INDEX = "https://www.boatrace.jp/owpc/pc/race/index"
 UA = "kyotei-ai-v8-live/1.0 (+GitHub Actions; next-day race program)"
+LOCAL = threading.local()
 
 
 def clean(value: str) -> str:
@@ -43,6 +45,29 @@ def fetch_page(session: requests.Session, date: str, venue: int, race: int) -> s
     response.raise_for_status()
     response.encoding = response.apparent_encoding or "utf-8"
     return response.text
+
+
+def session_for_thread() -> requests.Session:
+    session = getattr(LOCAL, "session", None)
+    if session is None:
+        session = requests.Session()
+        session.headers.update({"User-Agent": UA})
+        LOCAL.session = session
+    return session
+
+
+def active_venues(date: str):
+    session = session_for_thread()
+    response = session.get(INDEX, params={"hd": date}, timeout=30)
+    response.raise_for_status()
+    response.encoding = response.apparent_encoding or "utf-8"
+    soup = BeautifulSoup(response.text, "lxml")
+    found = set()
+    for link in soup.select("a[href*='jcd=']"):
+        match = re.search(r"[?&]jcd=(\d{2})(?:&|$)", link.get("href", ""))
+        if match:
+            found.add(int(match.group(1)))
+    return sorted(found)
 
 
 def parse_racer(row_text: str):
@@ -133,19 +158,20 @@ def parse_race(html: str, date: str, venue: int, race: int):
 
 
 def fetch_race(date: str, venue: int, race: int):
-    with requests.Session() as session:
-        session.headers.update({"User-Agent": UA})
-        html = fetch_page(session, date, venue, race)
+    html = fetch_page(session_for_thread(), date, venue, race)
     return venue, race, parse_race(html, date, venue, race)
 
 
 def build(date: str):
     stadiums = {}
     failures = []
+    venues = active_venues(date)
+    if not venues:
+        raise RuntimeError("Official next-day venue list is not ready")
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {
             executor.submit(fetch_race, date, venue, race): (venue, race)
-            for venue in VENUES
+            for venue in venues
             for race in range(1, 13)
         }
         for future in as_completed(futures):
