@@ -1,0 +1,11 @@
+.modes button{
+  font-weight:800;
+  transition:background .15s,border-color .15s,box-shadow .15s;
+}
+
+.modes button.active{
+  background:linear-gradient(#3e87d9,#2f73be);
+  border-color:#70b8ff;
+  color:#fff;
+  box-shadow:0 0 0 1px rgba(112,184,255,.28) inset;
+}
