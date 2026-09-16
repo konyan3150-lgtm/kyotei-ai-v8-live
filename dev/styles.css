@@ -2,6 +2,6 @@
 /* Selected race: keep race status colors, but make the current choice unmistakable. */
 #raceScroll{padding-bottom:15px!important}
 #raceScroll .racechip.active{z-index:5;border:2px solid #ffe15a!important;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 14px rgba(255,225,90,.95)!important;transform:translateY(-2px) scale(1.08);filter:brightness(1.18)}
-#raceScroll .racechip.active::after{content:"選択中";position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);padding:2px 4px;border-radius:999px;background:#ffe15a;color:#16202a;font-size:7px;font-weight:1000;line-height:1;white-space:nowrap}
-.selectedrace{margin-right:auto;display:flex;align-items:center;min-height:31px;padding:6px 10px;border:2px solid #ffe15a;border-radius:9px;background:linear-gradient(135deg,#594700,#2e2606);color:#fff4aa;font-size:13px;font-weight:950;box-shadow:0 0 10px rgba(255,225,90,.25)}
+#raceScroll .racechip.active::after{content:"選択中";position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);padding:2px 4px;border-radius:999px;background:#fff;color:#16202a;font-size:7px;font-weight:1000;line-height:1;white-space:nowrap}
+.selectedrace{margin-right:auto;display:flex;align-items:center;min-height:31px;padding:6px 10px;border:2px solid #fff;border-radius:9px;background:linear-gradient(135deg,#594700,#2e2606);color:#fff4aa;font-size:13px;font-weight:950;box-shadow:0 0 10px rgba(255,225,90,.25)}
 @media(max-width:380px){#raceScroll .racechip.active{transform:translateY(-2px) scale(1.06)}.selectedrace{font-size:12px;padding:6px 8px}}
