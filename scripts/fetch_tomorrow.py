@@ -168,7 +168,9 @@ def build(date: str):
     venues = active_venues(date)
     if not venues:
         raise RuntimeError("Official next-day venue list is not ready")
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    # The official site throttles parallel access. A single keep-alive session is
+    # slower but consistently returns the complete racer table.
+    with ThreadPoolExecutor(max_workers=1) as executor:
         futures = {
             executor.submit(fetch_race, date, venue, race): (venue, race)
             for venue in venues
@@ -188,9 +190,10 @@ def build(date: str):
         stadium["races"] = dict(sorted(stadium["races"].items(), key=lambda x: int(x[0])))
     stadiums = dict(sorted(stadiums.items(), key=lambda x: int(x[0])))
     race_count = sum(len(s["races"]) for s in stadiums.values())
-    if not stadiums or race_count < 12:
+    expected = len(venues) * 12
+    if not stadiums or race_count != expected:
         sample = "; ".join(failures[:5])
-        raise RuntimeError(f"Next-day program is not ready ({race_count} races). {sample}")
+        raise RuntimeError(f"Next-day program is incomplete ({race_count}/{expected} races). {sample}")
     return {
         "date": date,
         "generated_at": datetime.now(JST).isoformat(timespec="seconds"),
