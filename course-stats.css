@@ -1,0 +1,27 @@
+.coursenote{font-size:10px;color:#7892aa;margin:0 0 6px}
+.coursecell{font-weight:900;color:#70b8ff}
+.coursegood{color:#72e7ad;font-weight:900}
+.racechip.race-pending{background:#152433!important;border-color:#d69b32!important;color:#b9c8d4!important;opacity:.82}
+.racechip.race-pending.active{box-shadow:0 0 0 1px rgba(255,190,74,.35) inset}
+.racebadge.pending{background:#5a421d;color:#ffd37a}
+.scorenote{font-size:9.5px;line-height:1.35;color:#8fa9bf;padding:5px 7px;background:#061421;border-bottom:1px solid #173653}
+.scoretable .scorebig{font-size:15px;font-weight:950;color:#66d9ff}
+.scoregrade{display:inline-flex;align-items:center;justify-content:center;width:24px;height:20px;border-radius:6px;font-size:11px;font-weight:950}
+.scoregrade.gradeA{background:#0d5734;color:#76f0aa;border:1px solid #238e5b}
+.scoregrade.gradeB{background:#5a421d;color:#ffd37a;border:1px solid #9a6d25}
+.scoregrade.gradeC{background:#3c2930;color:#ff9aaa;border:1px solid #7a3e4c}
+.scoresubtitle{font-size:11px;font-weight:900;color:#b9cee0;padding:8px 7px 5px;background:#071725;border-top:1px solid #173653}
+.breakdown td:not(:first-child){font-weight:850;color:#b9e5ff}
+.v8grid{grid-template-columns:1fr}
+.modehint{font-size:10px;line-height:1.4;color:#9fb7ca;background:#071725;border:1px solid #173653;border-radius:7px;padding:6px 8px;margin-bottom:6px}
+.modestats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.modestat{background:#071725;border:1px solid #173653;border-radius:8px;padding:8px 3px;text-align:center}
+.modestat.active{border-color:#2f9cff;box-shadow:0 0 0 1px rgba(47,156,255,.2) inset}
+.modestat small,.modestat span{display:block;font-size:9px;color:#8ca8c2}
+.modestat b{display:block;font-size:16px;color:#72e7ad;margin:3px 0}
+.venueprofile{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.venueprofile>div{background:#071725;border:1px solid #173653;border-radius:8px;padding:7px 3px;text-align:center}
+.venueprofile small{display:block;font-size:9px;color:#8ca8c2}
+.venueprofile b{display:block;font-size:12px;color:#b9e5ff;margin-top:3px}
+.venuenote{font-size:9px;color:#7892aa;line-height:1.4;margin-top:6px}
+.techniquelead{background:#071725;border:1px solid #173653;border-radius:9px;padding:8px;margin-bottom:7px}.techniquelead>small{display:block;color:#8ca8c2;font-size:10px;margin-bottom:5px}.techniquechips{display:flex;gap:5px;flex-wrap:wrap}.techniquechip{display:inline-flex;align-items:center;gap:4px;border:1px solid #28516f;border-radius:999px;background:#0d2a43;padding:5px 8px;font-size:11px;color:#bcd4e8}.techniquechip b{color:#fff}.techniquechip.rank1{background:#0d5a3c;border-color:#28b979;color:#baffd3}.techniquechip.rank2{background:#123d62;border-color:#338bd1}.techniquenote{font-size:9.5px;color:#7892aa;margin-top:6px;line-height:1.4}.techniquetable th:nth-child(1){width:12%}.techniquetable th:nth-child(2){width:32%}.techniquetable th:nth-child(3){width:36%}.techniquetable th:nth-child(4){width:20%}.techniquetable td small{display:block;color:#7892aa;font-size:8.5px;margin-top:2px}
