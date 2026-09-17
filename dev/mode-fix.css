@@ -55,3 +55,34 @@
   font-size:8.5px;
   color:#8ca8c2;
 }
+
+.mode-money{
+  display:grid;
+  gap:3px;
+  margin:0 1px 5px;
+  padding:5px;
+  background:#061421;
+  border:1px solid #173653;
+  border-radius:6px;
+}
+
+.modestat .mode-money span{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:3px;
+  font-size:8.5px;
+}
+
+.mode-money em{
+  color:#7892aa;
+  font-style:normal;
+}
+
+.mode-money strong{
+  min-width:0;
+  color:#e6f3ff;
+  font-size:10px;
+  line-height:1.2;
+  white-space:nowrap;
+}
