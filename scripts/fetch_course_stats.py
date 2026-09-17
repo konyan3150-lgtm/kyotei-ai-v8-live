@@ -250,6 +250,16 @@ def main() -> int:
             pending.append((number, name))
 
     print(f"date={date} target={len(targets)} cached={len(racers)} fetch={len(pending)}")
+    unchanged = (
+        not pending
+        and cache.get("date") == date
+        and cache.get("targetCount") == len(targets)
+        and cache.get("coverage") == coverage
+    )
+    if unchanged:
+        print("course statistics are already current")
+        return 0
+
     failures: list[tuple[str, str]] = []
     with ThreadPoolExecutor(max_workers=max(1, min(args.workers, 6))) as executor:
         futures = {
