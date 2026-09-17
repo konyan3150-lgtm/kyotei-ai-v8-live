@@ -14,7 +14,7 @@ function currentCourse(r,k){
 }
 
 function racerCourseStat(r,k,x){
-  if(!courseStatsData||courseStatsData.date!==day())return null;
+  if(!courseStatsData?.racers)return null;
   return courseStatsData.racers?.[String(x.number)]?.courses?.[currentCourse(r,k)]||null;
 }
 
@@ -49,7 +49,7 @@ probs=function(r,k,x){
 function renderCourseStats(r){
   const el=document.getElementById('courseStats');
   if(!el)return;
-  const valid=courseStatsData&&courseStatsData.date===day();
+  const valid=!!courseStatsData?.racers;
   const rows=Object.entries(r?.racers||{}).sort((a,b)=>Number(a[0])-Number(b[0]));
   el.innerHTML=`<div class="coursenote">想定Cは展示進入を優先し、未発表時は枠番を使用｜補正幅は各着順±6%以内</div><table class="data"><thead><tr><th>枠</th><th>想定C</th><th>平均ST</th><th>1着率</th><th>2着率</th><th>3着率</th></tr></thead><tbody>${rows.map(([k,x])=>{const c=currentCourse(r,k),s=valid?courseStatsData.racers?.[String(x.number)]?.courses?.[c]:null;return `<tr><td><span class="lanechip l${k}">${k}</span></td><td class="coursecell">${c}C</td><td>${courseStatValue(s?.avgStart)}</td><td class="${Number(s?.win1)>=30?'coursegood':''}">${courseStatValue(s?.win1,'%')}</td><td>${courseStatValue(s?.win2,'%')}</td><td>${courseStatValue(s?.win3,'%')}</td></tr>`}).join('')}</tbody></table>`;
   const diag=document.getElementById('courseDiag');
@@ -66,7 +66,7 @@ async function loadCourseStats(){
     if(data?.schema!=='kyotei-course-stats'||!data.racers)throw new Error('データ形式不一致');
     courseStatsData=data;
     const count=Object.keys(data.racers).length,target=data.targetCount||data.coverage?.reduce((n,v)=>n+(v.racers?.length||0),0)||count;
-    if(diag)diag.textContent=data.date===day()?`✓ コース別成績取得OK｜${count}/${target}人｜次締切レースを表示`:'コース別成績：本日データ更新待ち';
+    if(diag){const stale=data.date!==day(),label=String(data.date||'').replace(/(....)(..)(..)/,'$1/$2/$3');diag.textContent=`✓ コース別成績取得OK｜${count}/${target}人｜${stale?'保存データ '+label+' を利用':'本日データ'}`;}
     if(D&&sid){if(typeof autoSaveAllPredictions==='function')autoSaveAllPredictions();draw()}
   }catch(e){
     courseStatsData=null;
