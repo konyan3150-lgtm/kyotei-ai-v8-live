@@ -35,21 +35,25 @@ function renderModeStats(records){
     const hitRate=s.races?(s.hits/s.races*100).toFixed(1)+'%':'--',roi=s.invest?(s.payout/s.invest*100).toFixed(1)+'%':'--';
     return `<div class="modestat ${mode===predictionMode?'active':''}"><small class="mode-name">${labels[mode]}</small><div class="mode-metrics"><div><span>的中率</span><b>${hitRate}</b></div><div><span>回収率</span><b class="mode-roi">${roi}</b></div></div><div class="mode-money"><span><em>投資</em><strong>¥${s.invest.toLocaleString()}</strong></span><span><em>払戻</em><strong>¥${s.payout.toLocaleString()}</strong></span></div><span class="mode-count">的中 ${s.hits}/${s.races}R</span></div>`
   }).join('');
-  const latest=records.filter(x=>x?.settled&&x?.modes&&typeof x.modes==='object').sort((a,b)=>String(b.settled_at||b.saved_at||b.date||'').localeCompare(String(a.settled_at||a.saved_at||a.date||'')))[0];
-  let audit='<div class="modeaudit empty">結果確定後に、直近レースのモード別買い目を表示します。</div>';
-  if(latest){
-    const safe=v=>String(v??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
-    const result=String(latest.result||Object.values(latest.modes).find(m=>m?.result)?.result||'').trim();
-    const date=String(latest.date||'').replace(/^(\\d{4})(\\d{2})(\\d{2})$/,'$1/$2/$3');
-    const venue=latest.stadium_name||latest.stadium||'';
-    const race=Number(latest.race)||latest.race||'--';
+  const safe=v=>String(v??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+  const selected=records.find(x=>String(x?.date||'')===String(day())&&Number(x?.stadium)===Number(sid)&&Number(x?.race)===Number(rno));
+  const date=String(day()).replace(/^(\d{4})(\d{2})(\d{2})$/,'$1/$2/$3');
+  const venue=N?.[sid]||selected?.stadium_name||sid||'--';
+  const race=Number(rno)||rno||'--';
+  let audit;
+  if(!selected){
+    audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-empty-note">このレースは、締切前に保存された買い目がありません。</div></div>`
+  }else{
+    const modeData=selected.modes&&typeof selected.modes==='object'?selected.modes:{[selected.mode||'hit']:{picks:selected.picks,settled:selected.settled,hit:selected.hit,result:selected.result}};
+    const result=String(selected.result||Object.values(modeData).find(m=>m?.result)?.result||'').trim();
+    const settled=!!selected.settled||Object.values(modeData).some(m=>m?.settled);
     const rows=Object.keys(labels).map(mode=>{
-      const m=latest.modes[mode],picks=Array.isArray(m?.picks)?m.picks:[];
-      const pickHtml=picks.length?picks.map(p=>`<span class="${String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):'<span class="no-picks">記録なし</span>';
-      const status=m?.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status">未判定</span>';
+      const m=modeData[mode],picks=Array.isArray(m?.picks)?m.picks:[];
+      const pickHtml=picks.length?picks.map(p=>`<span class="${result&&String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):'<span class="no-picks">記録なし</span>';
+      const status=!m?'<span class="audit-status">記録なし</span>':m.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status wait">判定待ち</span>';
       return `<div class="audit-row"><div class="audit-mode"><b>${labels[mode]}</b>${status}</div><div class="audit-picks">${pickHtml}</div></div>`
     }).join('');
-    audit=`<div class="modeaudit"><div class="audit-title"><span>直近の確定レース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-result">結果 <strong>${safe(result||'--')}</strong></div><div class="audit-label">保存された買い目</div>${rows}</div>`
+    audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-label">保存された買い目</div>${rows}</div>`
   }
   el.innerHTML=cards+audit
 }
