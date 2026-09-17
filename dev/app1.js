@@ -15,7 +15,44 @@ function savePredictionSnapshot(r,rows){if(models.length!==3||!rows.length||rows
 function settlePredictionKey(r,key){const t=r?.result?.payouts?.trifecta?.[0];if(!t)return false;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}if(!rec||rec.settled)return false;const combo=String(t.combination||'').trim(),amount=Number(t.amount||0);if(rec.modes&&typeof rec.modes==='object'){for(const mode of ['hit','balance','return']){const m=rec.modes[mode];if(!m)continue;m.settled=true;m.result=combo;m.hit=Array.isArray(m.picks)&&m.picks.includes(combo);m.payout=m.hit?amount:0}const selected=rec.modes[rec.mode]||rec.modes.hit;rec.hit=!!selected?.hit;rec.payout=Number(selected?.payout||0);rec.picks=selected?.picks||rec.picks;rec.stake=Number(selected?.stake||rec.stake||0)}else{rec.hit=Array.isArray(rec.picks)&&rec.picks.includes(combo);rec.payout=rec.hit?amount:0}rec.settled=true;rec.result=combo;rec.settled_at=new Date().toISOString();try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}}
 function settlePrediction(r){return settlePredictionKey(r,resultStoreKey())}
 function settleStoredPredictions(data,date){const prefix=`kyotei_v8_dev_result_${date}_`,keys=[];for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key?.startsWith(prefix))keys.push(key)}let saved=0,settled=0,pending=0;for(const key of keys){let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){continue}if(!rec||rec.settled)continue;saved++;const stadium=String(rec.stadium||''),raceNo=String(Number(rec.race||0)),race=data?.programs?.stadiums?.[stadium]?.races?.[raceNo];if(race?.result?.payouts?.trifecta?.[0]){if(settlePredictionKey(race,key))settled++}else pending++}renderStats();return{saved,settled,pending}}
-function renderModeStats(records){const el=document.getElementById('modeStats');if(!el)return;const sums={hit:{races:0,hits:0,invest:0,payout:0},balance:{races:0,hits:0,invest:0,payout:0},return:{races:0,hits:0,invest:0,payout:0}};for(const x of records){if(x?.modes&&typeof x.modes==='object'){for(const mode of Object.keys(sums)){const m=x.modes[mode];if(!m?.settled)continue;sums[mode].races++;if(m.hit)sums[mode].hits++;sums[mode].invest+=Number(m.stake||0);sums[mode].payout+=Number(m.payout||0)}}else if(x?.settled){const mode=sums[x.mode]?x.mode:'hit';sums[mode].races++;if(x.hit)sums[mode].hits++;sums[mode].invest+=Number(x.stake||0);sums[mode].payout+=Number(x.payout||0)}}const labels={hit:'的中重視',balance:'バランス',return:'回収重視'};el.innerHTML=Object.entries(sums).map(([mode,s])=>{const hitRate=s.races?(s.hits/s.races*100).toFixed(1)+'%':'--',roi=s.invest?(s.payout/s.invest*100).toFixed(1)+'%':'--';return `<div class="modestat ${mode===predictionMode?'active':''}"><small class="mode-name">${labels[mode]}</small><div class="mode-metrics"><div><span>的中率</span><b>${hitRate}</b></div><div><span>回収率</span><b class="mode-roi">${roi}</b></div></div><div class="mode-money"><span><em>投資</em><strong>¥${s.invest.toLocaleString()}</strong></span><span><em>払戻</em><strong>¥${s.payout.toLocaleString()}</strong></span></div><span class="mode-count">的中 ${s.hits}/${s.races}R</span></div>`}).join('')}
+function renderModeStats(records){
+  const el=document.getElementById('modeStats');if(!el)return;
+  const sums={hit:{races:0,hits:0,invest:0,payout:0},balance:{races:0,hits:0,invest:0,payout:0},return:{races:0,hits:0,invest:0,payout:0}};
+  for(const x of records){
+    if(x?.modes&&typeof x.modes==='object'){
+      for(const mode of Object.keys(sums)){
+        const m=x.modes[mode];if(!m?.settled)continue;
+        sums[mode].races++;if(m.hit)sums[mode].hits++;
+        sums[mode].invest+=Number(m.stake||0);sums[mode].payout+=Number(m.payout||0)
+      }
+    }else if(x?.settled){
+      const mode=sums[x.mode]?x.mode:'hit';sums[mode].races++;if(x.hit)sums[mode].hits++;
+      sums[mode].invest+=Number(x.stake||0);sums[mode].payout+=Number(x.payout||0)
+    }
+  }
+  const labels={hit:'的中重視',balance:'バランス',return:'回収重視'};
+  const cards=Object.entries(sums).map(([mode,s])=>{
+    const hitRate=s.races?(s.hits/s.races*100).toFixed(1)+'%':'--',roi=s.invest?(s.payout/s.invest*100).toFixed(1)+'%':'--';
+    return `<div class="modestat ${mode===predictionMode?'active':''}"><small class="mode-name">${labels[mode]}</small><div class="mode-metrics"><div><span>的中率</span><b>${hitRate}</b></div><div><span>回収率</span><b class="mode-roi">${roi}</b></div></div><div class="mode-money"><span><em>投資</em><strong>¥${s.invest.toLocaleString()}</strong></span><span><em>払戻</em><strong>¥${s.payout.toLocaleString()}</strong></span></div><span class="mode-count">的中 ${s.hits}/${s.races}R</span></div>`
+  }).join('');
+  const latest=records.filter(x=>x?.settled&&x?.modes&&typeof x.modes==='object').sort((a,b)=>String(b.settled_at||b.saved_at||b.date||'').localeCompare(String(a.settled_at||a.saved_at||a.date||'')))[0];
+  let audit='<div class="modeaudit empty">結果確定後に、直近レースのモード別買い目を表示します。</div>';
+  if(latest){
+    const safe=v=>String(v??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+    const result=String(latest.result||Object.values(latest.modes).find(m=>m?.result)?.result||'').trim();
+    const date=String(latest.date||'').replace(/^(\\d{4})(\\d{2})(\\d{2})$/,'$1/$2/$3');
+    const venue=latest.stadium_name||latest.stadium||'';
+    const race=Number(latest.race)||latest.race||'--';
+    const rows=Object.keys(labels).map(mode=>{
+      const m=latest.modes[mode],picks=Array.isArray(m?.picks)?m.picks:[];
+      const pickHtml=picks.length?picks.map(p=>`<span class="${String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):'<span class="no-picks">記録なし</span>';
+      const status=m?.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status">未判定</span>';
+      return `<div class="audit-row"><div class="audit-mode"><b>${labels[mode]}</b>${status}</div><div class="audit-picks">${pickHtml}</div></div>`
+    }).join('');
+    audit=`<div class="modeaudit"><div class="audit-title"><span>直近の確定レース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-result">結果 <strong>${safe(result||'--')}</strong></div><div class="audit-label">保存された買い目</div>${rows}</div>`
+  }
+  el.innerHTML=cards+audit
+}
 function renderStats(){let races=0,hits=0,invest=0,payout=0,records=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith('kyotei_v8_dev_result_'))continue;let x;try{x=JSON.parse(localStorage.getItem(k)||'null')}catch(e){continue}if(x)records.push(x);if(!x?.settled)continue;races++;if(x.hit)hits++;invest+=Number(x.stake||0);payout+=Number(x.payout||0)}const vals=document.querySelectorAll('.stats .stat b');if(vals.length>=6){const hitRate=races?hits/races*100:0,roi=invest?payout/invest*100:0,profit=payout-invest;vals[0].textContent=races?hitRate.toFixed(1)+'%':'--';vals[1].textContent=races?roi.toFixed(1)+'%':'--';vals[2].textContent=races+'R';vals[3].textContent='¥'+invest.toLocaleString();vals[4].textContent='¥'+payout.toLocaleString();vals[5].textContent=(profit<0?'-¥':'¥')+Math.abs(profit).toLocaleString()}renderModeStats(records)}
 function transferRecords(){const records={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key||!key.startsWith('kyotei_v8_dev_result_'))continue;const value=localStorage.getItem(key);if(value!=null)records[key]=value}return records}
 function setTransferStatus(message,type=''){const el=document.getElementById('transferStatus');if(!el)return;el.textContent=message;el.className='transferStatus'+(type?' '+type:'')}
