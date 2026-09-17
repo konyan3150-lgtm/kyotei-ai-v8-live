@@ -203,3 +203,15 @@
   color:#7892aa;
   font-weight:500;
 }
+
+.audit-empty-note{
+  padding:8px 0 1px;
+  color:#7892aa;
+  font-size:9.5px;
+  line-height:1.45;
+}
+
+.audit-status.wait{
+  background:#123d62;
+  color:#9ed6ff;
+}
