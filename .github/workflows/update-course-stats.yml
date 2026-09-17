@@ -1,0 +1,47 @@
+name: Update daily course statistics
+
+on:
+  push:
+    paths:
+      - "scripts/fetch_course_stats.py"
+      - ".github/workflows/update-course-stats.yml"
+  schedule:
+    # 06:20 and 08:20 JST. The second run catches late program changes.
+    - cron: "20 21,23 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-daily-course-statistics
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install parser dependencies
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4 lxml
+      - name: Fetch today's racers and course statistics
+        run: python scripts/fetch_course_stats.py course-stats.json --workers 4 --refresh-days 30
+      - name: Copy statistics to development
+        run: cp course-stats.json dev/course-stats.json
+      - name: Commit changed statistics
+        run: |
+          if git diff --quiet -- course-stats.json dev/course-stats.json; then
+            echo "Course statistics are already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add course-stats.json dev/course-stats.json
+          git commit -m "chore: update daily course statistics"
+          git push
