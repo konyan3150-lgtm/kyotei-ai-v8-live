@@ -9,3 +9,49 @@
   color:#fff;
   box-shadow:0 0 0 1px rgba(112,184,255,.28) inset;
 }
+
+.modestat{
+  padding:8px 4px;
+}
+
+.modestat .mode-name{
+  min-height:14px;
+  font-size:10px;
+  font-weight:900;
+  color:#b9cee0;
+}
+
+.mode-metrics{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:3px;
+  margin:6px 0 5px;
+}
+
+.mode-metrics>div{
+  min-width:0;
+  padding:4px 2px;
+  background:#0a2032;
+  border-radius:6px;
+}
+
+.modestat .mode-metrics span{
+  font-size:8px;
+  color:#7892aa;
+}
+
+.modestat .mode-metrics b{
+  margin:2px 0 0;
+  font-size:13px;
+  line-height:1.15;
+  color:#72e7ad;
+}
+
+.modestat .mode-metrics .mode-roi{
+  color:#66d9ff;
+}
+
+.modestat .mode-count{
+  font-size:8.5px;
+  color:#8ca8c2;
+}
