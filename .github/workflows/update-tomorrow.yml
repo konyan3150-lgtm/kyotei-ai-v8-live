@@ -27,7 +27,9 @@ jobs:
       - name: Install parser dependencies
         run: python -m pip install --disable-pip-version-check requests beautifulsoup4 lxml
       - name: Fetch official next-day program
-        run: |\n          python scripts/fetch_tomorrow.py dev/tomorrow.json\n          cp dev/tomorrow.json tomorrow.json
+        run: |
+          python scripts/fetch_tomorrow.py dev/tomorrow.json
+          cp dev/tomorrow.json tomorrow.json
       - name: Commit changed program
         run: |
           if git diff --quiet -- dev/tomorrow.json tomorrow.json; then
