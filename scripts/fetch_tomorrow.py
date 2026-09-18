@@ -22,6 +22,10 @@ UA = "kyotei-ai-v8-live/1.0 (+GitHub Actions; next-day race program)"
 LOCAL = threading.local()
 
 
+class IncompleteProgramError(RuntimeError):
+    """Official next-day program has not finished publishing yet."""
+
+
 def clean(value: str) -> str:
     return re.sub(r"\s+", " ", value.replace("\u3000", " ")).strip()
 
@@ -193,7 +197,7 @@ def build(date: str):
     expected = len(venues) * 12
     if not stadiums or race_count != expected:
         sample = "; ".join(failures[:5])
-        raise RuntimeError(f"Next-day program is incomplete ({race_count}/{expected} races). {sample}")
+        raise IncompleteProgramError(f"Next-day program is incomplete ({race_count}/{expected} races). {sample}")
     return {
         "date": date,
         "generated_at": datetime.now(JST).isoformat(timespec="seconds"),
@@ -205,7 +209,11 @@ def build(date: str):
 def main() -> int:
     target = (datetime.now(JST) + timedelta(days=1)).strftime("%Y%m%d")
     output = Path(sys.argv[1] if len(sys.argv) > 1 else "dev/tomorrow.json")
-    payload = build(target)
+    try:
+        payload = build(target)
+    except IncompleteProgramError as exc:
+        print(f"Waiting for official next-day data: {exc}")
+        return 0
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     races = sum(len(x["races"]) for x in payload["programs"]["stadiums"].values())
