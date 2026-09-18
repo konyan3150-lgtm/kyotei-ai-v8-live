@@ -2,9 +2,9 @@ name: Update next-day race program
 
 on:
   schedule:
-    # 16:05, 18:05, 20:05, 22:05 JST. The first run with published data wins;
-    # later runs safely refresh program changes.
-    - cron: "5 7,9,11,13 * * *"
+    # Run after the day's boat races have finished (JST).
+    # 22:05 is the primary fetch; 23:05 retries if official next-day data is still incomplete.
+    - cron: "5 13,14 * * *"
   workflow_dispatch:
 
 permissions:
