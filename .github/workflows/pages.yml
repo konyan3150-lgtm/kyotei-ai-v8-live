@@ -6,6 +6,7 @@ on:
     workflows:
       - "Update daily course statistics"
       - "Update next-day race program"
+      - "Update live odds"
     types: [completed]
   workflow_dispatch:
 permissions:
