@@ -27,8 +27,18 @@
     }
     if(coverage<65)level='skip';
     const reasons=[`1着最上位 ${pct(top)}・2位との差 ${pct(gap)}`,`情報充足度 ${coverage}%`];
-    if(mode==='return')reasons.push(`V8穴度 ${(hole*100).toFixed(0)}%（オッズ未反映）`);
+    if(mode==='return')reasons.push(`V8穴度 ${(hole*100).toFixed(0)}%`);
     if(coverage<80)reasons.push('不足データがあるため厳選判定を抑えています');
+    if(typeof valueAssessmentForMode==='function'){
+      const value=valueAssessmentForMode(mode,rows);
+      if(value.available){
+        if(!value.picks.length){level='skip';reasons.push(`期待値EV ${value.threshold.toFixed(2)}以上なし`)}
+        else reasons.push(`期待値買い目 ${value.picks.length}点・最高EV ${Math.max(...value.picks.map(x=>x.ev)).toFixed(2)}`)
+      }else{
+        if(mode==='return')level='skip';else if(level==='buy')level='caution';
+        reasons.push('3連単オッズ未取得のため購入推奨を保留')
+      }
+    }
     return{level,score,coverage,top,gap,hole,reasons,created_at:new Date().toISOString()}
   }
 
@@ -38,7 +48,7 @@
     if(!openForSaving(r))return false;
     const key=resultStoreKey();let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}
     if(!rec||rec.settled)return false;
-    rec.recommendations=recs;rec.recommendation_version=2;
+    rec.recommendations=recs;rec.recommendation_version=3;
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
   }
 
@@ -47,8 +57,8 @@
     let races=0,hits=0,invest=0,payout=0;
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){continue}
-      if(rec?.recommendation_version!==2||rec?.recommendations?.[mode]?.level!=='buy')continue;
-      const data=rec?.modes?.[mode]||((rec?.mode||'hit')===mode?rec:null);if(!data?.settled)continue;
+      if(rec?.recommendation_version!==3||rec?.recommendations?.[mode]?.level!=='buy')continue;
+      const data=rec?.value_modes?.[mode];if(!data?.settled||data.skipped||!Number(data.stake))continue;
       races++;if(data.hit)hits++;invest+=Number(data.stake||0);payout+=Number(data.payout||0)
     }
     return{races,hits,hitRate:races?hits/races*100:0,roi:invest?payout/invest*100:0}
@@ -66,7 +76,7 @@
     const current=recs[predictionMode]||recs.hit,stats=recommendedStats(predictionMode);
     const chips=MODES.map(m=>`<div class="recommend-chip ${m===predictionMode?'active':''} ${recs[m]?.level||'none'}"><span>${LABELS[m]}</span><b>${LEVELS[recs[m]?.level]||'判定なし'}</b></div>`).join('');
     const statText=stats.races?`購入推奨のみ：${stats.races}R・的中率 ${stats.hitRate.toFixed(1)}%・回収率 ${stats.roi.toFixed(1)}%`:'購入推奨の確定実績は、これから蓄積されます';
-    box.innerHTML=`<div class="recommend-title"><span>V8 購入判断（厳選基準）</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${Number(current.score||0)}</b>/100</div><ul>${(current.reasons||[]).map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
+    box.innerHTML=`<div class="recommend-title"><span>V8 購入判断（期待値対応）</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${Number(current.score||0)}</b>/100</div><ul>${(current.reasons||[]).map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
   }
 
   const baseSave=savePredictionSnapshot;
