@@ -1,7 +1,7 @@
 (function(){
   const PREFIX='kyotei_v8_dev_result_';
   const EV_THRESHOLDS={hit:1.00,balance:1.08,return:1.15};
-  const POOL_LIMITS={hit:20,balance:40,return:120};
+  const POOL_LIMITS={hit:12,balance:40,return:120};
   const MAX_PICKS=4;
   const SAFETY_FACTOR=.75;
   let oddsPayload=null,oddsStatus='loading';
@@ -15,7 +15,9 @@
     const record=currentOdds(),threshold=EV_THRESHOLDS[mode]||1.15;
     if(!record)return{available:false,status:oddsStatus,threshold,picks:[],record:null};
     const all=makeBets(rows,120,'hit').map(x=>{const odds=oddsFor(record,x.combo),prob=Number(x.share||0),safeProb=prob*SAFETY_FACTOR;return{...x,prob,safeProb,odds,ev:safeProb*odds}}).filter(x=>x.odds>0&&x.prob>=.002);
-    const pool=all.sort((a,b)=>b.prob-a.prob).slice(0,POOL_LIMITS[mode]||120);
+    const favorite=rows.slice().sort((a,b)=>Number(b.p?.[0]||0)-Number(a.p?.[0]||0))[0]?.k;
+    const candidates=mode==='hit'?all.filter(x=>x.boats?.[0]===favorite&&x.ranks?.[1]<=3&&x.ranks?.[2]<=4):all;
+    const pool=candidates.sort((a,b)=>b.prob-a.prob).slice(0,POOL_LIMITS[mode]||120);
     const qualified=pool.filter(x=>x.ev>=threshold);
     qualified.sort(mode==='hit'?(a,b)=>b.prob-a.prob:mode==='balance'?(a,b)=>(b.ev*Math.sqrt(b.prob))-(a.ev*Math.sqrt(a.prob)):(a,b)=>b.ev-a.ev);
     return{available:true,status:'ok',threshold,picks:qualified.slice(0,MAX_PICKS),record}
@@ -39,7 +41,7 @@
     let rec;const key=resultStoreKey();try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}if(!rec||rec.settled)return false;
     rec.value_modes=rec.value_modes||{};
     for(const mode of ['hit','balance','return']){const v=valueCandidates(rows,mode),picks=v.picks.map(x=>x.combo);rec.value_modes[mode]={picks,stake:picks.length*100,settled:false,hit:false,payout:0,skipped:!picks.length,threshold:v.threshold,items:v.picks.map(x=>({combo:x.combo,prob:x.safeProb,odds:x.odds,ev:x.ev}))}}
-    rec.odds_snapshot_at=currentOdds().fetched_at||new Date().toISOString();rec.value_model_version=1;
+    rec.odds_snapshot_at=currentOdds().fetched_at||new Date().toISOString();rec.value_model_version=2;
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
   }
   const baseSavePredictionSnapshot=savePredictionSnapshot;
