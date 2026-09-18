@@ -34,6 +34,7 @@ jobs:
       - name: Install odds scraper
         env:
           COMPOSER: scripts/odds-composer.json
+          COMPOSER_VENDOR_DIR: scripts/vendor
         run: composer install --no-dev --prefer-dist --no-progress --no-interaction
       - name: Fetch near-cutoff trifecta odds
         run: php scripts/fetch_live_odds.php
