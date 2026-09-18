@@ -26,7 +26,7 @@ foreach ($stadiums as $stadiumNumber => $stadium) {
         if (!$rawClose) continue;
         try { $close = new DateTimeImmutable(str_replace(' ', 'T', (string) $rawClose), new DateTimeZone('Asia/Tokyo')); } catch (Throwable) { continue; }
         $delta = $close->getTimestamp() - $now->getTimestamp();
-        if ($delta >= -20 * 60 && $delta <= 75 * 60) $candidates[] = [(int)$stadiumNumber, (int)$raceNumber, $close->format(DATE_ATOM)];
+        if ($delta >= -20 * 60 && $delta <= 120 * 60) $candidates[] = [(int)$stadiumNumber, (int)$raceNumber, $close->format(DATE_ATOM)];
     }
 }
 if (!$candidates) { echo "no races near cutoff\n"; exit(0); }
