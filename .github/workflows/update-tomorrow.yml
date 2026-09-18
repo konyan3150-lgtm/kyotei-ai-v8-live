@@ -6,6 +6,10 @@ on:
     # 22:05 is the primary fetch; 23:05 retries if official next-day data is still incomplete.
     - cron: "5 13,14 * * *"
   workflow_dispatch:
+  push:
+    paths:
+      - "scripts/fetch_tomorrow.py"
+      - ".github/workflows/update-tomorrow.yml"
 
 permissions:
   contents: write
