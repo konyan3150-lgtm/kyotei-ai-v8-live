@@ -27,14 +27,23 @@
   function renderValueBets(rows){
     const el=document.getElementById('bets');if(!el)return;
     const value=valueCandidates(rows,predictionMode);
-    if(!value.available){baseRenderBets(rows);const note=document.createElement('div');note.className='odds-wait';note.textContent=oddsStatus==='loading'?'3連単オッズ取得中…':'3連単オッズ未取得｜通常のV8買い目を表示';el.prepend(note);return}
+    if(!value.available){el.innerHTML=`<div class="odds-wait">${oddsStatus==='loading'?'3連単オッズ取得中…':'3連単オッズ未取得｜期待値判定待機'}</div>`;return}
     const updated=value.record?.fetched_at?new Date(value.record.fetched_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
     if(!value.picks.length){el.innerHTML=`<div class="odds-head">期待値判定 <b>見送り</b><span>オッズ ${updated}更新</span></div><div class="value-empty">基準EV ${value.threshold.toFixed(2)}以上の買い目がありません。</div>`;return}
     el.innerHTML=`<div class="odds-head">期待値買い目 <b>${value.picks.length}点</b><span>オッズ ${updated}更新</span></div><table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th></tr></thead><tbody>${value.picks.map(x=>`<tr><td>${x.combo}</td><td>${(x.safeProb*100).toFixed(1)}%</td><td>${x.odds.toFixed(1)}</td><td class="${x.ev>=1.15?'ev-high':''}">${x.ev.toFixed(2)}</td></tr>`).join('')}</tbody></table><div class="value-note">確率は安全率75%で計算｜1点100円｜最大4点</div>`
   }
 
+  function renderBaseBetsPanel(rows){
+    const el=document.getElementById('baseBets');if(!el)return;
+    if(typeof models==='undefined'||models.length!==3){el.textContent='V8モデル待機中';return}
+    const picks=makeBets(rows,6,predictionMode);
+    if(!picks.length){el.textContent='通常V8買い目を計算できません';return}
+    const notes={hit:'確率上位を優先した通常V8予想',balance:'本命を残しながら着順を分散した通常V8予想',return:'V8穴度を加味した通常V8予想（オッズ未反映）'};
+    el.innerHTML=`<div class="modehint">${notes[predictionMode]}</div><table class="bettable"><thead><tr><th>順</th><th>組番</th><th>モード指数</th></tr></thead><tbody>${picks.map(b=>`<tr><td>${b.rank}</td><td>${b.combo}</td><td>${(b.share*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>`
+  }
+
   const baseRenderBets=renderBets;
-  renderBets=function(rows){renderValueBets(rows)};
+  renderBets=function(rows){renderValueBets(rows);renderBaseBetsPanel(rows)};
 
   function saveValueSnapshot(r,rows){
     if(!currentOdds()||hasOfficialResult(r))return false;const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN;if(Number.isFinite(close)&&close<=Date.now())return false;
