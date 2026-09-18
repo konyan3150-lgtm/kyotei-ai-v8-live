@@ -2,7 +2,7 @@ name: Update live odds
 
 on:
   schedule:
-    - cron: "*/15 0-12,22-23 * * *"
+    - cron: "*/10 0-12,22-23 * * *"
   workflow_dispatch:
   push:
     paths:
