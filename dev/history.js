@@ -16,6 +16,7 @@
   }
 
   function modeRecord(rec,mode){
+    if(rec?.value_modes?.[mode])return rec.value_modes[mode];
     if(rec?.modes?.[mode])return rec.modes[mode];
     if((rec?.mode||'hit')===mode)return {picks:rec.picks,stake:rec.stake,settled:rec.settled,hit:rec.hit,payout:rec.payout,result:rec.result};
     return null;
@@ -47,7 +48,7 @@
     const minDate=period==='all'?0:todayValue-(Number(period)-1)*86400000;
     const filtered=all.filter(x=>(venueId==='all'||String(x.stadium)===venueId)&&dateValue(x.date)>=minDate);
     let races=0,hits=0,invest=0,payout=0;
-    for(const rec of filtered)for(const item of selectedModes(rec,mode)){if(!item.data?.settled)continue;races++;if(item.data.hit)hits++;invest+=Number(item.data.stake||0);payout+=Number(item.data.payout||0)}
+    for(const rec of filtered)for(const item of selectedModes(rec,mode)){if(!item.data?.settled||item.data.skipped||!Number(item.data.stake))continue;races++;if(item.data.hit)hits++;invest+=Number(item.data.stake||0);payout+=Number(item.data.payout||0)}
     const roi=invest?payout/invest*100:0,hitRate=races?hits/races*100:0,profit=payout-invest;
     document.getElementById('historySummary').innerHTML=`<div><small>集計</small><b>${races}R</b></div><div><small>的中率</small><b>${races?hitRate.toFixed(1)+'%':'--'}</b></div><div><small>回収率</small><b class="roi">${invest?roi.toFixed(1)+'%':'--'}</b></div><div><small>投資</small><b>${yen(invest)}</b></div><div><small>払戻</small><b>${yen(payout)}</b></div><div><small>収支</small><b class="${profit>=0?'plus':'minus'}">${yen(profit)}</b></div>`;
     const list=document.getElementById('historyList');
@@ -56,7 +57,7 @@
       const items=selectedModes(rec,mode);if(!items.length)return'';
       const venueName=rec.stadium_name||((typeof N!=='undefined'&&N[rec.stadium])||rec.stadium||'--');
       const settled=items.some(x=>x.data?.settled),result=rec.result||items.find(x=>x.data?.result)?.data?.result||'';
-      const rows=items.map(({mode:m,data})=>{const stake=Number(data.stake||0),pay=Number(data.payout||0),profit=pay-stake;const state=!data.settled?'判定待ち':data.hit?'的中':'不的中';return `<div class="history-mode-row"><span>${MODE_LABELS[m]}</span><b class="${!data.settled?'wait':data.hit?'hit':'miss'}">${state}</b><em>投資 ${yen(stake)}</em><em>払戻 ${yen(pay)}</em><strong class="${profit>=0?'plus':'minus'}">${yen(profit)}</strong></div>`}).join('');
+      const rows=items.map(({mode:m,data})=>{const stake=Number(data.stake||0),pay=Number(data.payout||0),profit=pay-stake;const state=data.skipped?'見送り':!data.settled?'判定待ち':data.hit?'的中':'不的中';return `<div class="history-mode-row"><span>${MODE_LABELS[m]}</span><b class="${data.skipped||!data.settled?'wait':data.hit?'hit':'miss'}">${state}</b><em>投資 ${yen(stake)}</em><em>払戻 ${yen(pay)}</em><strong class="${profit>=0?'plus':'minus'}">${yen(profit)}</strong></div>`}).join('');
       return `<details class="history-item"><summary><span><b>${esc(dateLabel(rec.date))}　${esc(venueName)} ${esc(rec.race)}R</b><small>${settled?'結果 '+esc(result||'--'):'結果 未確定'}</small></span><span class="history-result ${items.some(x=>x.data?.hit)?'hit':settled?'miss':'wait'}">${items.some(x=>x.data?.hit)?'的中':settled?'不的中':'待機'}</span></summary><div class="history-detail">${rows}</div></details>`
     }).join('')||'<div class="history-empty">このモードの記録はありません。</div>';
   }
