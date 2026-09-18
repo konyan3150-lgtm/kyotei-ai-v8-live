@@ -19,9 +19,10 @@ function renderModeStats(records){
   const el=document.getElementById('modeStats');if(!el)return;
   const sums={hit:{races:0,hits:0,invest:0,payout:0},balance:{races:0,hits:0,invest:0,payout:0},return:{races:0,hits:0,invest:0,payout:0}};
   for(const x of records){
-    if(x?.modes&&typeof x.modes==='object'){
+    const modeSet=x?.value_modes&&typeof x.value_modes==='object'?x.value_modes:x?.modes;
+    if(modeSet&&typeof modeSet==='object'){
       for(const mode of Object.keys(sums)){
-        const m=x.modes[mode];if(!m?.settled)continue;
+        const m=modeSet[mode];if(!m?.settled||m.skipped||!Number(m.stake))continue;
         sums[mode].races++;if(m.hit)sums[mode].hits++;
         sums[mode].invest+=Number(m.stake||0);sums[mode].payout+=Number(m.payout||0)
       }
@@ -44,20 +45,20 @@ function renderModeStats(records){
   if(!selected){
     audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-empty-note">このレースは、締切前に保存された買い目がありません。</div></div>`
   }else{
-    const modeData=selected.modes&&typeof selected.modes==='object'?selected.modes:{[selected.mode||'hit']:{picks:selected.picks,settled:selected.settled,hit:selected.hit,result:selected.result}};
+    const modeData=selected.value_modes&&typeof selected.value_modes==='object'?selected.value_modes:selected.modes&&typeof selected.modes==='object'?selected.modes:{[selected.mode||'hit']:{picks:selected.picks,settled:selected.settled,hit:selected.hit,result:selected.result}};
     const result=String(selected.result||Object.values(modeData).find(m=>m?.result)?.result||'').trim();
     const settled=!!selected.settled||Object.values(modeData).some(m=>m?.settled);
     const rows=Object.keys(labels).map(mode=>{
       const m=modeData[mode],picks=Array.isArray(m?.picks)?m.picks:[];
-      const pickHtml=picks.length?picks.map(p=>`<span class="${result&&String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):'<span class="no-picks">記録なし</span>';
-      const status=!m?'<span class="audit-status">記録なし</span>':m.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status wait">判定待ち</span>';
+      const pickHtml=picks.length?picks.map(p=>`<span class="${result&&String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):`<span class="no-picks">${m?.skipped?'見送り':'記録なし'}</span>`;
+      const status=!m?'<span class="audit-status">記録なし</span>':m.skipped?'<span class="audit-status">見送り</span>':m.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status wait">判定待ち</span>';
       return `<div class="audit-row"><div class="audit-mode"><b>${labels[mode]}</b>${status}</div><div class="audit-picks">${pickHtml}</div></div>`
     }).join('');
-    audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-label">保存された買い目</div>${rows}</div>`
+    audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-label">保存された期待値買い目</div>${rows}</div>`
   }
   el.innerHTML=cards+audit
 }
-function renderStats(){let races=0,hits=0,invest=0,payout=0,records=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith('kyotei_v8_dev_result_'))continue;let x;try{x=JSON.parse(localStorage.getItem(k)||'null')}catch(e){continue}if(x)records.push(x);if(!x?.settled)continue;races++;if(x.hit)hits++;invest+=Number(x.stake||0);payout+=Number(x.payout||0)}const vals=document.querySelectorAll('.stats .stat b');if(vals.length>=6){const hitRate=races?hits/races*100:0,roi=invest?payout/invest*100:0,profit=payout-invest;vals[0].textContent=races?hitRate.toFixed(1)+'%':'--';vals[1].textContent=races?roi.toFixed(1)+'%':'--';vals[2].textContent=races+'R';vals[3].textContent='¥'+invest.toLocaleString();vals[4].textContent='¥'+payout.toLocaleString();vals[5].textContent=(profit<0?'-¥':'¥')+Math.abs(profit).toLocaleString()}renderModeStats(records)}
+function renderStats(){let races=0,hits=0,invest=0,payout=0,records=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith('kyotei_v8_dev_result_'))continue;let x;try{x=JSON.parse(localStorage.getItem(k)||'null')}catch(e){continue}if(x)records.push(x);const primary=x?.value_modes?.[x?.mode||'hit']||x;if(!primary?.settled||primary?.skipped||!Number(primary?.stake))continue;races++;if(primary.hit)hits++;invest+=Number(primary.stake||0);payout+=Number(primary.payout||0)}const vals=document.querySelectorAll('.stats .stat b');if(vals.length>=6){const hitRate=races?hits/races*100:0,roi=invest?payout/invest*100:0,profit=payout-invest;vals[0].textContent=races?hitRate.toFixed(1)+'%':'--';vals[1].textContent=races?roi.toFixed(1)+'%':'--';vals[2].textContent=races+'R';vals[3].textContent='¥'+invest.toLocaleString();vals[4].textContent='¥'+payout.toLocaleString();vals[5].textContent=(profit<0?'-¥':'¥')+Math.abs(profit).toLocaleString()}renderModeStats(records)}
 function transferRecords(){const records={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key||!key.startsWith('kyotei_v8_dev_result_'))continue;const value=localStorage.getItem(key);if(value!=null)records[key]=value}return records}
 function setTransferStatus(message,type=''){const el=document.getElementById('transferStatus');if(!el)return;el.textContent=message;el.className='transferStatus'+(type?' '+type:'')}
 function exportTransferData(){try{const records=transferRecords(),payload={schema:'kyotei-v8-results',version:1,exportedAt:new Date().toISOString(),recordCount:Object.keys(records).length,records},blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a'),d=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Tokyo'});a.href=url;a.download=`kyotei-v8-results-${d}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);setTransferStatus(`${payload.recordCount}件の実績データを書き出しました。`,'ok')}catch(e){setTransferStatus('書き出しに失敗しました：'+e.message,'err')}}
