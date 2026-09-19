@@ -45,13 +45,15 @@ function renderModeStats(records){
     const modeData=selected.value_model_version===3&&selected.value_modes&&typeof selected.value_modes==='object'?selected.value_modes:{};
     const result=String(selected.result||Object.values(modeData).find(m=>m?.result)?.result||'').trim();
     const settled=!!selected.settled||Object.values(modeData).some(m=>m?.settled);
+    const recorded=Object.values(modeData).some(m=>m&&!m.skipped&&Array.isArray(m.picks)),modeSettled=Object.values(modeData).some(m=>m?.settled&&!m.skipped),hitModes=Object.keys(labels).filter(mode=>modeData[mode]?.settled&&modeData[mode]?.hit);
+    const verdictClass=!modeSettled?'wait':hitModes.length?'hit':'miss',verdictText=!recorded?'期待値：記録なし':!modeSettled?'期待値：判定待ち':hitModes.length?'期待値の的中：'+hitModes.map(m=>labels[m]).join('・'):'期待値：全モード不的中';
     const rows=Object.keys(labels).map(mode=>{
       const m=modeData[mode],picks=Array.isArray(m?.picks)?m.picks:[];
       const pickHtml=picks.length?picks.map(p=>`<span class="${result&&String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):`<span class="no-picks">${m?.skipped?'見送り':'記録なし'}</span>`;
       const status=!m?'<span class="audit-status">記録なし</span>':m.skipped?'<span class="audit-status">見送り</span>':m.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status wait">判定待ち</span>';
       return `<div class="audit-row"><div class="audit-mode"><b>${labels[mode]}</b>${status}</div><div class="audit-picks">${pickHtml}</div></div>`
     }).join('');
-    audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-label">保存された期待値買い目</div>${rows}</div>`
+    audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-verdict ${verdictClass}">${safe(verdictText)}</div><div class="audit-label">保存された期待値買い目</div>${rows}</div>`
   }
   el.innerHTML=cards;const auditEl=document.getElementById('valueSavedAudit');if(auditEl)auditEl.innerHTML=audit
 }
@@ -77,8 +79,10 @@ function renderBaseStats(records){
   else{
     const modeData=selected.modes&&typeof selected.modes==='object'?selected.modes:{[selected.mode||'hit']:{picks:selected.picks,settled:selected.settled,hit:selected.hit,result:selected.result}};
     const result=String(selected.result||Object.values(modeData).find(m=>m?.result)?.result||'').trim(),settled=!!selected.settled||Object.values(modeData).some(m=>m?.settled);
+    const modeSettled=Object.values(modeData).some(m=>m?.settled),hitModes=Object.keys(labels).filter(mode=>modeData[mode]?.settled&&modeData[mode]?.hit);
+    const verdictClass=!modeSettled?'wait':hitModes.length?'hit':'miss',verdictText=!modeSettled?'V8：判定待ち':hitModes.length?'V8の的中：'+hitModes.map(m=>labels[m]).join('・'):'V8：全モード不的中';
     const rows=Object.keys(labels).map(mode=>{const m=modeData[mode],picks=Array.isArray(m?.picks)?m.picks:[];const pickHtml=picks.length?picks.map(p=>`<span class="${result&&String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):`<span class="no-picks">記録なし</span>`;const status=!m?'<span class="audit-status">記録なし</span>':m.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status wait">判定待ち</span>';return `<div class="audit-row"><div class="audit-mode"><b>${labels[mode]}</b>${status}</div><div class="audit-picks">${pickHtml}</div></div>`}).join('');
-    audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(raceNo)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-label">保存されたV8買い目</div>${rows}</div>`
+    audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(raceNo)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-verdict ${verdictClass}">${safe(verdictText)}</div><div class="audit-label">保存されたV8買い目</div>${rows}</div>`
   }
   el.innerHTML=cards;const auditEl=document.getElementById('baseSavedAudit');if(auditEl)auditEl.innerHTML=audit
 }
