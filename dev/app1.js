@@ -53,7 +53,7 @@ function renderModeStats(records){
     }).join('');
     audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-label">保存された期待値買い目</div>${rows}</div>`
   }
-  el.innerHTML=cards+audit
+  el.innerHTML=cards;const auditEl=document.getElementById('valueSavedAudit');if(auditEl)auditEl.innerHTML=audit
 }
 function fillStatsBox(id,s){
   const vals=document.querySelectorAll(`#${id} .stat b`);if(vals.length<6)return;
@@ -80,7 +80,7 @@ function renderBaseStats(records){
     const rows=Object.keys(labels).map(mode=>{const m=modeData[mode],picks=Array.isArray(m?.picks)?m.picks:[];const pickHtml=picks.length?picks.map(p=>`<span class="${result&&String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):`<span class="no-picks">記録なし</span>`;const status=!m?'<span class="audit-status">記録なし</span>':m.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status wait">判定待ち</span>';return `<div class="audit-row"><div class="audit-mode"><b>${labels[mode]}</b>${status}</div><div class="audit-picks">${pickHtml}</div></div>`}).join('');
     audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(raceNo)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-label">保存されたV8買い目</div>${rows}</div>`
   }
-  el.innerHTML=cards+audit
+  el.innerHTML=cards;const auditEl=document.getElementById('baseSavedAudit');if(auditEl)auditEl.innerHTML=audit
 }
 function renderStats(){let total={races:0,hits:0,invest:0,payout:0},records=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith('kyotei_v8_dev_result_'))continue;let x;try{x=JSON.parse(localStorage.getItem(k)||'null')}catch(e){continue}if(x)records.push(x);if(x?.value_model_version!==3)continue;const primary=x?.value_modes?.[x?.value_mode||x?.mode||'hit'];if(!primary?.settled||primary?.skipped||!Number(primary?.stake))continue;total.races++;if(primary.hit)total.hits++;total.invest+=Number(primary.stake||0);total.payout+=Number(primary.payout||0)}fillStatsBox('valueStats',total);renderModeStats(records);renderBaseStats(records)}
 function transferRecords(){const records={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key||!key.startsWith('kyotei_v8_dev_result_'))continue;const value=localStorage.getItem(key);if(value!=null)records[key]=value}return records}
