@@ -42,7 +42,7 @@ function renderModeStats(records){
   if(!selected){
     audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-empty-note">このレースは、締切前に保存された買い目がありません。</div></div>`
   }else{
-    const modeData=selected.value_modes&&typeof selected.value_modes==='object'?selected.value_modes:selected.modes&&typeof selected.modes==='object'?selected.modes:{[selected.mode||'hit']:{picks:selected.picks,settled:selected.settled,hit:selected.hit,result:selected.result}};
+    const modeData=selected.value_model_version===3&&selected.value_modes&&typeof selected.value_modes==='object'?selected.value_modes:{};
     const result=String(selected.result||Object.values(modeData).find(m=>m?.result)?.result||'').trim();
     const settled=!!selected.settled||Object.values(modeData).some(m=>m?.settled);
     const rows=Object.keys(labels).map(mode=>{
