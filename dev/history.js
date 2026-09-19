@@ -15,21 +15,26 @@
     return out.sort((a,b)=>dateValue(b.date)-dateValue(a.date)||Number(b.race||0)-Number(a.race||0)||Number(b.stadium||0)-Number(a.stadium||0));
   }
 
-  function modeRecord(rec,mode){
+  function modeRecord(rec,mode,view){
+    if(view==='base'){
+      if(rec?.modes?.[mode])return rec.modes[mode];
+      if((rec?.mode||'hit')===mode&&rec?.picks)return {picks:rec.picks,stake:rec.stake,settled:rec.settled,hit:rec.hit,payout:rec.payout,result:rec.result};
+      return null
+    }
     if(rec?.value_model_version===3&&rec?.value_modes?.[mode])return rec.value_modes[mode];
     return null;
   }
 
-  function selectedModes(rec,mode){
-    if(mode!=='all'){const m=modeRecord(rec,mode);return m?[{mode,data:m}]:[]}
-    return Object.keys(MODE_LABELS).map(k=>({mode:k,data:modeRecord(rec,k)})).filter(x=>x.data);
+  function selectedModes(rec,mode,view){
+    if(mode!=='all'){const m=modeRecord(rec,mode,view);return m?[{mode,data:m}]:[]}
+    return Object.keys(MODE_LABELS).map(k=>({mode:k,data:modeRecord(rec,k,view)})).filter(x=>x.data);
   }
 
   function ensurePanel(){
     if(document.getElementById('historyPanel'))return;
-    const stats=document.getElementById('modeStats')?.closest('.panel');if(!stats)return;
-    const panel=document.createElement('div');panel.className='panel value-view-panel';panel.id='historyPanel';
-    panel.innerHTML='<div class="title">レース履歴・絞り込み成績</div><div class="history-filters"><label>期間<select id="historyPeriod"><option value="7">7日間</option><option value="30" selected>30日間</option><option value="all">全期間</option></select></label><label>会場<select id="historyVenue"><option value="all">全会場</option></select></label><label>モード<select id="historyMode"><option value="hit">的中重視</option><option value="balance">バランス</option><option value="return">回収重視</option><option value="all">全モード合計</option></select></label></div><div class="history-summary" id="historySummary"></div><div class="history-list" id="historyList"></div>';
+    const stats=document.getElementById('baseStats')?.closest('.panel');if(!stats)return;
+    const panel=document.createElement('div');panel.className='panel';panel.id='historyPanel';
+    panel.innerHTML='<div class="title" id="historyTitle">期待値 レース履歴・絞り込み成績</div><div class="history-filters"><label>期間<select id="historyPeriod"><option value="7">7日間</option><option value="30" selected>30日間</option><option value="all">全期間</option></select></label><label>会場<select id="historyVenue"><option value="all">全会場</option></select></label><label>モード<select id="historyMode"><option value="hit">的中重視</option><option value="balance">バランス</option><option value="return">回収重視</option><option value="all">全モード合計</option></select></label></div><div class="history-summary" id="historySummary"></div><div class="history-list" id="historyList"></div>';
     stats.insertAdjacentElement('afterend',panel);
     ['historyPeriod','historyVenue','historyMode'].forEach(id=>document.getElementById(id).addEventListener('change',render));
   }
@@ -37,6 +42,8 @@
   function render(){
     ensurePanel();
     const panel=document.getElementById('historyPanel');if(!panel)return;
+    const view=document.querySelector('.prediction-type-tabs button.active')?.dataset.view==='base'?'base':'value';
+    const title=document.getElementById('historyTitle');if(title)title.textContent=(view==='base'?'V8':'期待値')+' レース履歴・絞り込み成績';
     const all=records(),venue=document.getElementById('historyVenue'),oldVenue=venue.value;
     const venues=[...new Map(all.map(x=>[String(x.stadium||''),x.stadium_name||((typeof N!=='undefined'&&N[x.stadium])||x.stadium)]).filter(x=>x[0])).entries()].sort((a,b)=>Number(a[0])-Number(b[0]));
     venue.innerHTML='<option value="all">全会場</option>'+venues.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
@@ -46,13 +53,13 @@
     const minDate=period==='all'?0:todayValue-(Number(period)-1)*86400000;
     const filtered=all.filter(x=>(venueId==='all'||String(x.stadium)===venueId)&&dateValue(x.date)>=minDate);
     let races=0,hits=0,invest=0,payout=0;
-    for(const rec of filtered)for(const item of selectedModes(rec,mode)){if(!item.data?.settled||item.data.skipped||!Number(item.data.stake))continue;races++;if(item.data.hit)hits++;invest+=Number(item.data.stake||0);payout+=Number(item.data.payout||0)}
+    for(const rec of filtered)for(const item of selectedModes(rec,mode,view)){if(!item.data?.settled||item.data.skipped||!Number(item.data.stake))continue;races++;if(item.data.hit)hits++;invest+=Number(item.data.stake||0);payout+=Number(item.data.payout||0)}
     const roi=invest?payout/invest*100:0,hitRate=races?hits/races*100:0,profit=payout-invest;
     document.getElementById('historySummary').innerHTML=`<div><small>集計</small><b>${races}R</b></div><div><small>的中率</small><b>${races?hitRate.toFixed(1)+'%':'--'}</b></div><div><small>回収率</small><b class="roi">${invest?roi.toFixed(1)+'%':'--'}</b></div><div><small>投資</small><b>${yen(invest)}</b></div><div><small>払戻</small><b>${yen(payout)}</b></div><div><small>収支</small><b class="${profit>=0?'plus':'minus'}">${yen(profit)}</b></div>`;
     const list=document.getElementById('historyList');
     if(!filtered.length){list.innerHTML='<div class="history-empty">条件に合う保存済みレースはありません。</div>';return}
     list.innerHTML=filtered.slice(0,60).map(rec=>{
-      const items=selectedModes(rec,mode);if(!items.length)return'';
+      const items=selectedModes(rec,mode,view);if(!items.length)return'';
       const venueName=rec.stadium_name||((typeof N!=='undefined'&&N[rec.stadium])||rec.stadium||'--');
       const settled=items.some(x=>x.data?.settled),result=rec.result||items.find(x=>x.data?.result)?.data?.result||'';
       const rows=items.map(({mode:m,data})=>{const stake=Number(data.stake||0),pay=Number(data.payout||0),profit=pay-stake;const state=data.skipped?'見送り':!data.settled?'判定待ち':data.hit?'的中':'不的中';return `<div class="history-mode-row"><span>${MODE_LABELS[m]}</span><b class="${data.skipped||!data.settled?'wait':data.hit?'hit':'miss'}">${state}</b><em>投資 ${yen(stake)}</em><em>払戻 ${yen(pay)}</em><strong class="${profit>=0?'plus':'minus'}">${yen(profit)}</strong></div>`}).join('');
@@ -63,5 +70,6 @@
   ensurePanel();
   const baseRenderStats=typeof renderStats==='function'?renderStats:null;
   if(baseRenderStats)renderStats=function(){baseRenderStats();render()};
+  window.renderPredictionHistory=render;
   render();
 })();
