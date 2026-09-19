@@ -16,9 +16,7 @@
   }
 
   function modeRecord(rec,mode){
-    if(rec?.value_modes?.[mode])return rec.value_modes[mode];
-    if(rec?.modes?.[mode])return rec.modes[mode];
-    if((rec?.mode||'hit')===mode)return {picks:rec.picks,stake:rec.stake,settled:rec.settled,hit:rec.hit,payout:rec.payout,result:rec.result};
+    if(rec?.value_model_version===3&&rec?.value_modes?.[mode])return rec.value_modes[mode];
     return null;
   }
 
