@@ -73,8 +73,8 @@
     const box=ensureBox();if(!box)return;
     let recs=allAssessments(r,rows),isOpen=openForSaving(r),saved=storedAssessments();
     if(!isOpen){if(saved)recs=saved;else recs=Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['締切前の判定記録がありません']}]))}
-    const current=recs[predictionMode]||recs.hit,stats=recommendedStats(predictionMode);
-    const chips=MODES.map(m=>`<div class="recommend-chip ${m===predictionMode?'active':''} ${recs[m]?.level||'none'}"><span>${LABELS[m]}</span><b>${LEVELS[recs[m]?.level]||'判定なし'}</b></div>`).join('');
+    const current=recs[valuePredictionMode]||recs.hit,stats=recommendedStats(valuePredictionMode);
+    const chips=MODES.map(m=>`<div class="recommend-chip ${m===valuePredictionMode?'active':''} ${recs[m]?.level||'none'}"><span>${LABELS[m]}</span><b>${LEVELS[recs[m]?.level]||'判定なし'}</b></div>`).join('');
     const statText=stats.races?`購入推奨のみ：${stats.races}R・的中率 ${stats.hitRate.toFixed(1)}%・回収率 ${stats.roi.toFixed(1)}%`:'購入推奨の確定実績は、これから蓄積されます';
     box.innerHTML=`<div class="recommend-title"><span>V8 購入判断（期待値対応）</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${Number(current.score||0)}</b>/100</div><ul>${(current.reasons||[]).map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
   }
