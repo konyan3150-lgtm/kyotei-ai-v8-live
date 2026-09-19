@@ -57,7 +57,7 @@
     let races=0,hits=0,invest=0,payout=0;
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){continue}
-      if(rec?.recommendation_version!==3||rec?.recommendations?.[mode]?.level!=='buy')continue;
+      if(rec?.value_model_version!==3||rec?.recommendation_version!==3||rec?.recommendations?.[mode]?.level!=='buy')continue;
       const data=rec?.value_modes?.[mode];if(!data?.settled||data.skipped||!Number(data.stake))continue;
       races++;if(data.hit)hits++;invest+=Number(data.stake||0);payout+=Number(data.payout||0)
     }
