@@ -26,7 +26,7 @@
 
   function renderValueBets(rows){
     const el=document.getElementById('bets');if(!el)return;
-    const value=valueCandidates(rows,predictionMode);
+    const value=valueCandidates(rows,valuePredictionMode);
     if(!value.available){el.innerHTML=`<div class="odds-wait">${oddsStatus==='loading'?'3連単オッズ取得中…':'3連単オッズ未取得｜期待値判定待機'}</div>`;return}
     const updated=value.record?.fetched_at?new Date(value.record.fetched_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
     if(!value.picks.length){el.innerHTML=`<div class="odds-head">期待値判定 <b>見送り</b><span>オッズ ${updated}更新</span></div><div class="value-empty">基準EV ${value.threshold.toFixed(2)}以上の買い目がありません。</div>`;return}
@@ -36,10 +36,10 @@
   function renderBaseBetsPanel(rows){
     const el=document.getElementById('baseBets');if(!el)return;
     if(typeof models==='undefined'||models.length!==3){el.textContent='V8モデル待機中';return}
-    const picks=makeBets(rows,6,predictionMode);
+    const picks=makeBets(rows,6,basePredictionMode);
     if(!picks.length){el.textContent='通常V8買い目を計算できません';return}
     const notes={hit:'確率上位を優先した通常V8予想',balance:'本命を残しながら着順を分散した通常V8予想',return:'V8穴度を加味した通常V8予想（オッズ未反映）'};
-    el.innerHTML=`<div class="modehint">${notes[predictionMode]}</div><table class="bettable"><thead><tr><th>順</th><th>組番</th><th>モード指数</th></tr></thead><tbody>${picks.map(b=>`<tr><td>${b.rank}</td><td>${b.combo}</td><td>${(b.share*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>`
+    el.innerHTML=`<div class="modehint">${notes[basePredictionMode]}</div><table class="bettable"><thead><tr><th>順</th><th>組番</th><th>モード指数</th></tr></thead><tbody>${picks.map(b=>`<tr><td>${b.rank}</td><td>${b.combo}</td><td>${(b.share*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>`
   }
 
   const baseRenderBets=renderBets;
@@ -50,7 +50,7 @@
     let rec;const key=resultStoreKey();try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}if(!rec||rec.settled)return false;
     rec.value_modes=rec.value_modes||{};
     for(const mode of ['hit','balance','return']){const v=valueCandidates(rows,mode),picks=v.picks.map(x=>x.combo);rec.value_modes[mode]={picks,stake:picks.length*100,settled:false,hit:false,payout:0,skipped:!picks.length,threshold:v.threshold,items:v.picks.map(x=>({combo:x.combo,prob:x.safeProb,odds:x.odds,ev:x.ev}))}}
-    rec.odds_snapshot_at=currentOdds().fetched_at||new Date().toISOString();rec.value_model_version=3;
+    rec.odds_snapshot_at=currentOdds().fetched_at||new Date().toISOString();rec.value_mode=valuePredictionMode;rec.value_model_version=3;
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
   }
   const baseSavePredictionSnapshot=savePredictionSnapshot;
