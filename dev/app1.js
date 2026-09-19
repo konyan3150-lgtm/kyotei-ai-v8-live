@@ -26,9 +26,6 @@ function renderModeStats(records){
         sums[mode].races++;if(m.hit)sums[mode].hits++;
         sums[mode].invest+=Number(m.stake||0);sums[mode].payout+=Number(m.payout||0)
       }
-    }else if(x?.settled){
-      const mode=sums[x.mode]?x.mode:'hit';sums[mode].races++;if(x.hit)sums[mode].hits++;
-      sums[mode].invest+=Number(x.stake||0);sums[mode].payout+=Number(x.payout||0)
     }
   }
   const labels={hit:'的中重視',balance:'バランス',return:'回収重視'};
