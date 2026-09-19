@@ -28,7 +28,7 @@
   function ensurePanel(){
     if(document.getElementById('historyPanel'))return;
     const stats=document.getElementById('modeStats')?.closest('.panel');if(!stats)return;
-    const panel=document.createElement('div');panel.className='panel';panel.id='historyPanel';
+    const panel=document.createElement('div');panel.className='panel value-view-panel';panel.id='historyPanel';
     panel.innerHTML='<div class="title">レース履歴・絞り込み成績</div><div class="history-filters"><label>期間<select id="historyPeriod"><option value="7">7日間</option><option value="30" selected>30日間</option><option value="all">全期間</option></select></label><label>会場<select id="historyVenue"><option value="all">全会場</option></select></label><label>モード<select id="historyMode"><option value="hit">的中重視</option><option value="balance">バランス</option><option value="return">回収重視</option><option value="all">全モード合計</option></select></label></div><div class="history-summary" id="historySummary"></div><div class="history-list" id="historyList"></div>';
     stats.insertAdjacentElement('afterend',panel);
     ['historyPeriod','historyVenue','historyMode'].forEach(id=>document.getElementById(id).addEventListener('change',render));
