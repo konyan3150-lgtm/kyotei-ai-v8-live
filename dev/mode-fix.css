@@ -215,3 +215,5 @@
   background:#123d62;
   color:#9ed6ff;
 }
+
+.audit-verdict{margin:2px 0 8px;padding:7px 9px;border-radius:7px;font-size:11px;font-weight:900;border:1px solid #28516f;background:#0a2032;color:#b9cee0}.audit-verdict.hit{border-color:#1e9b63;background:#0b3e29;color:#83f5b7}.audit-verdict.miss{border-color:#8e4653;background:#38232a;color:#ff9aaa}.audit-verdict.wait{border-color:#245d88;background:#103653;color:#9ed6ff}
