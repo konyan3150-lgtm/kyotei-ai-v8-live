@@ -19,9 +19,21 @@
     });
   }
 
-  bar.addEventListener('click',event=>{
+  bar.addEventListener('click',async event=>{
     const button=event.target.closest('button[data-nav-target]');
     if(!button)return;
+    if(button.dataset.navTarget==='refresh'){
+      if(button.disabled)return;
+      button.disabled=true;
+      button.classList.add('refreshing');
+      button.setAttribute('aria-label','更新中');
+      try{if(typeof load==='function')await load()}finally{
+        button.disabled=false;
+        button.classList.remove('refreshing');
+        button.setAttribute('aria-label','最新データに更新');
+      }
+      return;
+    }
     const target=targetFor(button.dataset.navTarget);
     if(!target)return;
     select(button);
