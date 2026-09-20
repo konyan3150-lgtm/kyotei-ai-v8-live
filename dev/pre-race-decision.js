@@ -29,9 +29,11 @@
     const venue=D?.programs?.stadiums?.[sid],sc=document.getElementById('raceScroll');if(!venue||!sc)return;
     const races=Object.entries(venue.races||{}).sort((a,b)=>Number(a[0])-Number(b[0])),buttons=[...sc.querySelectorAll('.racechip')],now=Date.now();
     races.forEach(([raceNo,r],i)=>{
-      const b=buttons[i],close=raceCloseMs(r);if(!b||hasOfficialResult(r)||Number.isFinite(close)&&close<=now)return;
-      b.querySelector('.racebadge.close')?.remove();b.querySelector('.predecision')?.remove();
+      const b=buttons[i],close=raceCloseMs(r);if(!b)return;
+      b.querySelector('.predecision')?.remove();
       b.classList.remove('race-buy','race-skip','race-decision-pending');
+      if(hasOfficialResult(r)||Number.isFinite(close)&&close<=now)return;
+      b.querySelector('.racebadge.close')?.remove();
       const d=decisionFor(r,raceNo),soon=Number.isFinite(close)&&close-now<=15*60*1000;
       b.classList.add(d.state==='buy'?'race-buy':d.state==='skip'?'race-skip':'race-decision-pending');
       b.insertAdjacentHTML('beforeend',badgeHtml(d,soon));
