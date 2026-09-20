@@ -9,6 +9,7 @@ on:
   push:
     paths:
       - "scripts/fetch_tomorrow.py"
+      - "scripts/fetch_tide.py"
       - ".github/workflows/update-tomorrow.yml"
 
 permissions:
@@ -34,14 +35,16 @@ jobs:
         run: |
           python scripts/fetch_tomorrow.py dev/tomorrow.json
           cp dev/tomorrow.json tomorrow.json
+      - name: Fetch JMA astronomical tide table
+        run: python scripts/fetch_tide.py dev/tide.json
       - name: Commit changed program
         run: |
-          if git diff --quiet -- dev/tomorrow.json tomorrow.json; then
+          if git diff --quiet -- dev/tomorrow.json tomorrow.json dev/tide.json; then
             echo "Next-day program is already current."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dev/tomorrow.json tomorrow.json
+          git add dev/tomorrow.json tomorrow.json dev/tide.json
           git commit -m "chore: update next-day race program"
           git push
