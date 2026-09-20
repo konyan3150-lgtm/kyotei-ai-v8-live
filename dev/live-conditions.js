@@ -27,7 +27,7 @@
     const lane=Number(k),pr=previewFor(r,k),course=num(pr.course_number),currentWeight=num(pr.weight),prior=previousWeight(r,k),weightDelta=prior&&Number.isFinite(currentWeight)?currentWeight-prior.weight:NaN,tilt=num(pr.tilt_adjustment),parts=partsText(pr);
     return{lane,course,currentWeight,priorWeight:prior?.weight,weightDelta,tilt,parts,changed:Number.isFinite(course)&&course!==lane,preview:pr};
   }
-  function windInfo(r){const p=r?.preview||{},speed=num(p.wind_speed),direction=String(p.wind_direction_source||p.wind_direction||'').trim(),level=!Number.isFinite(speed)?'取得待ち':speed>=5?'大':speed>=3?'中':'小';return{speed,direction:direction||'--',level}}
+  function windInfo(r){const p=r?.preview||{},speed=num(p.wind_speed),direction=String(p.wind_direction_number_source||p.wind_direction_source||p.wind_direction||'').trim(),level=!Number.isFinite(speed)?'取得待ち':speed>=5?'大':speed>=3?'中':'小';return{speed,direction:direction||'--',level}}
   function factorFor(r,k){
     const info=boatLiveInfo(r,k),wind=windInfo(r);let course=1,weight=1,tilt=1,parts=1,windFactor=1;
     if(Number.isFinite(info.course))course=clamp(1+(info.lane-info.course)*.012,.96,1.04);
