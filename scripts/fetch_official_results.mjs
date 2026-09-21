@@ -7,13 +7,14 @@ const jstDay=(now=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/T
 const strip=s=>String(s||'').replace(/<[^>]+>/g,'').replace(/&nbsp;|&#160;/gi,' ').replace(/&yen;|&#165;/gi,'¥').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
 
 export function parseOfficialPayPage(html,date=jstDay()){
-  const races={},cell=/<td\b[^>]*class="[^"]*\bis-borderLeft1\b[^"]*"[^>]*data-href="([^"]+)"[^>]*>([\s\S]*?)<\/td>\s*<td\b[^>]*>([\s\S]*?)<\/td>/gi;
-  for(const m of String(html||'').matchAll(cell)){
-    const href=m[1].replaceAll('&amp;','&'),params=new URLSearchParams(href.split('?')[1]||''),stadium=String(Number(params.get('jcd'))),race=String(Number(params.get('rno')));
+  const races={},cells=[...String(html||'').matchAll(/<td\b([^>]*)>([\s\S]*?)<\/td>/gi)].map(m=>({attrs:m[1],body:m[2]}));
+  for(let i=0;i<cells.length;i++){
+    const hrefMatch=cells[i].attrs.match(/data-href="([^"]+)"/i);if(!hrefMatch)continue;
+    const href=hrefMatch[1].replaceAll('&amp;','&'),params=new URLSearchParams(href.split('?')[1]||''),stadium=String(Number(params.get('jcd'))),race=String(Number(params.get('rno')));
     if(!stadium||stadium==='NaN'||!race||race==='NaN')continue;
-    const resultHtml=m[2],resultText=strip(resultHtml);
+    const resultHtml=cells[i].body,resultText=strip(resultHtml);if(!/numberSet1|中止/.test(resultHtml))continue;
     if(/中止/.test(resultText)){(races[stadium]??={})[race]={cancelled:true};continue}
-    const numbers=[...resultHtml.matchAll(/numberSet1_number[^"']*?\bis-type([1-6])\b/gi)].map(x=>x[1]).slice(0,3),amount=Number(strip(m[3]).replace(/\D/g,''));
+    const numbers=[...resultHtml.matchAll(/numberSet1_number[^"']*?\bis-type([1-6])\b/gi)].map(x=>x[1]).slice(0,3),amount=Number(strip(cells[i+1]?.body).replace(/\D/g,''));
     if(numbers.length===3&&amount>0)(races[stadium]??={})[race]={combination:numbers.join('-'),amount};
   }
   const resultCount=Object.values(races).reduce((n,x)=>n+Object.keys(x).length,0);
