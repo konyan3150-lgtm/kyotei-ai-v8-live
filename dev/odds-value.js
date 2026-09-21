@@ -62,7 +62,7 @@
   async function loadLiveOdds(){
     if(typeof dateOffset!=='undefined'&&dateOffset!==0){oddsStatus='unavailable';return}
     try{const res=await fetch(`odds.json?d=${day()}&x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(String(data?.date)!==String(day())||!data?.races)throw new Error('本日データ待機中');oddsPayload=data;oddsStatus='ok'}catch(e){oddsPayload=null;oddsStatus='unavailable'}
-    try{if(D&&sid)draw()}catch(e){}
+    try{if(D&&sid){if(typeof autoSaveAllPredictions==='function')autoSaveAllPredictions();draw()}}catch(e){}
   }
   setTimeout(loadLiveOdds,500);setInterval(loadLiveOdds,180000);
 })();
