@@ -61,11 +61,11 @@
     list.innerHTML=filtered.slice(0,60).map(rec=>{
       const items=selectedModes(rec,mode,view);if(!items.length)return'';
       const venueName=rec.stadium_name||((typeof N!=='undefined'&&N[rec.stadium])||rec.stadium||'--');
-      const settled=items.some(x=>x.data?.settled),result=rec.result||items.find(x=>x.data?.result)?.data?.result||'';
-      const rows=items.map(({mode:m,data})=>{const stake=Number(data.stake||0),pay=Number(data.payout||0),profit=pay-stake;const state=data.skipped?'見送り':!data.settled?'判定待ち':data.hit?'的中':'不的中';return `<div class="history-mode-row"><span>${MODE_LABELS[m]}</span><b class="${data.skipped||!data.settled?'wait':data.hit?'hit':'miss'}">${state}</b><em>投資 ${yen(stake)}</em><em>払戻 ${yen(pay)}</em><strong class="${profit>=0?'plus':'minus'}">${yen(profit)}</strong></div>`}).join('');
+      const settled=items.some(x=>x.data?.settled),cancelled=!!rec.cancelled,result=rec.result||items.find(x=>x.data?.result)?.data?.result||'';
+      const rows=items.map(({mode:m,data})=>{const stake=cancelled?0:Number(data.stake||0),pay=Number(data.payout||0),profit=pay-stake;const state=cancelled?'中止':data.skipped?'見送り':!data.settled?'判定待ち':data.hit?'的中':'不的中';return `<div class="history-mode-row"><span>${MODE_LABELS[m]}</span><b class="${cancelled||data.skipped||!data.settled?'wait':data.hit?'hit':'miss'}">${state}</b><em>投資 ${yen(stake)}</em><em>払戻 ${yen(pay)}</em><strong class="${profit>=0?'plus':'minus'}">${yen(profit)}</strong></div>`}).join('');
       const visiblePayout=items.reduce((sum,x)=>sum+Number(x.data?.settled&&!x.data?.skipped?x.data?.payout||0:0),0);
-      const stateClass=items.some(x=>x.data?.hit)?'hit':settled?'miss':'wait',stateText=items.some(x=>x.data?.hit)?'的中':settled?'不的中':'待機';
-      return `<details class="history-item"><summary><span><b>${esc(dateLabel(rec.date))}　${esc(venueName)} ${esc(rec.race)}R</b><small>${settled?'結果 '+esc(result||'--'):'結果 未確定'}</small></span><span class="history-result-wrap"><span class="history-result ${stateClass}">${stateText}</span><small>払戻 ${settled?yen(visiblePayout):'--'}</small></span></summary><div class="history-detail">${rows}</div></details>`
+      const stateClass=cancelled?'wait':items.some(x=>x.data?.hit)?'hit':settled?'miss':'wait',stateText=cancelled?'中止':items.some(x=>x.data?.hit)?'的中':settled?'不的中':'待機';
+      return `<details class="history-item"><summary><span><b>${esc(dateLabel(rec.date))}　${esc(venueName)} ${esc(rec.race)}R</b><small>${cancelled?'開催中止':settled?'結果 '+esc(result||'--'):'結果 未確定'}</small></span><span class="history-result-wrap"><span class="history-result ${stateClass}">${stateText}</span><small>払戻 ${cancelled?yen(0):settled?yen(visiblePayout):'--'}</small></span></summary><div class="history-detail">${rows}</div></details>`
     }).join('')||'<div class="history-empty">このモードの記録はありません。</div>';
   }
 

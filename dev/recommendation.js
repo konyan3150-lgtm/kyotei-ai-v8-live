@@ -49,7 +49,8 @@
 
   function allAssessments(r,rows){return Object.fromEntries(MODES.map(m=>[m,assess(r,rows,m)]))}
   function allBaseAssessments(r,rows){return Object.fromEntries(MODES.map(m=>[m,assessBase(r,rows,m)]))}
-  function openForSaving(r){if(hasOfficialResult(r))return false;const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN;return !Number.isFinite(close)||close>Date.now()}
+  window.purchaseRecommendationsForRace=function(r,rows){return{value:allAssessments(r,rows),base:allBaseAssessments(r,rows)}};
+  function openForSaving(r){if(hasOfficialResult(r)||typeof isRaceCancelled==='function'&&isRaceCancelled(r,D?.programs?.stadiums?.[sid]?.races))return false;const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN;return !Number.isFinite(close)||close>Date.now()}
   function saveAssessments(r,rows,recs,baseRecs){
     if(!openForSaving(r))return false;
     const key=resultStoreKey();let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}
@@ -91,12 +92,13 @@
   }
   function renderRecommendation(r,rows){
     const box=ensureBox();if(!box)return;
+    const cancelled=typeof isRaceCancelled==='function'&&isRaceCancelled(r,D?.programs?.stadiums?.[sid]?.races),cancelledRecs=()=>Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['開催中止のため購入対象外です']} ]));
     let recs=allAssessments(r,rows),isOpen=openForSaving(r),saved=storedAssessments();
-    if(!isOpen){if(saved)recs=saved;else recs=Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['締切前の判定記録がありません']}]))}
+    if(cancelled)recs=cancelledRecs();else if(!isOpen){if(saved)recs=saved;else recs=Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['締切前の判定記録がありません']}]))}
     box.innerHTML=boxHtml('V8 購入判断（期待値対応）',recs,valuePredictionMode,recommendedStats(valuePredictionMode))
     const baseBox=ensureBaseBox();if(!baseBox)return;
     let baseRecs=allBaseAssessments(r,rows),savedBase=storedBaseAssessments();
-    if(!isOpen){if(savedBase)baseRecs=savedBase;else baseRecs=Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['締切前の判定記録がありません']}]))}
+    if(cancelled)baseRecs=cancelledRecs();else if(!isOpen){if(savedBase)baseRecs=savedBase;else baseRecs=Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['締切前の判定記録がありません']}]))}
     baseBox.innerHTML=boxHtml('V8 購入判断',baseRecs,basePredictionMode,recommendedStats(basePredictionMode,true))
   }
 

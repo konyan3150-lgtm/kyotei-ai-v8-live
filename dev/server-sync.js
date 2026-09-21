@@ -4,9 +4,11 @@
   function stamp(v){const n=Date.parse(v||'');return Number.isFinite(n)?n:0}
   function choose(local,server){
     if(!local)return server;
+    if(local.cancelled&&!server.cancelled)return local;
+    if(server.cancelled&&!local.cancelled)return server;
     if(local.settled&&!server.settled)return local;
     if(server.settled&&!local.settled)return server;
-    return stamp(server.settled_at||server.saved_at)>=stamp(local.settled_at||local.saved_at)?server:local
+    return stamp(server.cancelled_at||server.settled_at||server.saved_at)>=stamp(local.cancelled_at||local.settled_at||local.saved_at)?server:local
   }
   async function syncServerPredictions(){
     const el=diag();try{
