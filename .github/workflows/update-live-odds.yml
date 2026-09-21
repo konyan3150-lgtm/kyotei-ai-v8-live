@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - name: Sync latest main
+        run: git pull --ff-only origin main
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
