@@ -66,6 +66,7 @@
     let races=0,hits=0,invest=0,payout=0;
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){continue}
+      if(rec?.source!=='server')continue;
       const recommendation=isBase?rec?.base_recommendations?.[mode]:rec?.recommendations?.[mode];
       if(recommendation?.level!=='buy')continue;
       const data=isBase?rec?.modes?.[mode]:rec?.value_modes?.[mode];if(!data?.settled||data.skipped||!Number(data.stake))continue;
