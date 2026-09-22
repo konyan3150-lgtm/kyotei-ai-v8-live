@@ -50,7 +50,7 @@ function renderTechniqueTraits(r){
 
 async function loadTechniqueStats(){
   const diag=document.getElementById('techniqueDiag');
-  try{if(diag)diag.textContent='決まり手傾向：学習データ取得中…';const res=await fetch(`technique-stats.json?v=87&x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(data?.schema!=='kyotei-technique-stats'||!data.venues)throw new Error('データ形式不一致');techniqueStatsData=data;if(D&&sid){if(typeof autoSaveAllPredictions==='function')autoSaveAllPredictions();draw()}}catch(e){techniqueStatsData=null;if(diag)diag.textContent='決まり手傾向：取得待ち｜'+e.message}
+  try{if(diag)diag.textContent='決まり手傾向：学習データ取得中…';const res=await fetch('technique-stats.json?v=151');if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(data?.schema!=='kyotei-technique-stats'||!data.venues)throw new Error('データ形式不一致');techniqueStatsData=data;if(D&&sid){if(typeof autoSaveAllPredictions==='function')autoSaveAllPredictions();draw()}}catch(e){techniqueStatsData=null;if(diag)diag.textContent='決まり手傾向：取得待ち｜'+e.message}
 }
 
 const preTechniqueRace=race;
