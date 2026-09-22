@@ -18,3 +18,4 @@ html{scroll-behavior:smooth}.nav-anchor{scroll-margin-top:12px}.bottomnav button
 .lg-frame.result-ref{border-color:#b56cff;background:#3a2054}.lg-dot.ref{background:#4a2767;border-color:#b56cff}#raceScroll .racechip.race-reference:not(.active){background:#3a2054!important;border-color:#b56cff!important;color:#ead4ff!important}
 #raceScroll .racechip.race-cancelled{background:#202830!important;border-color:#87939d!important;color:#c3cbd2!important;opacity:.78}.racebadge.cancelled{background:#53616d;color:#fff}.venuechip .vnext.cancelled{color:#aeb8c0}
 #raceScroll .racechip.race-cancelled.active{box-shadow:0 0 0 2px #fff}.lg-frame.result-cancelled{border-color:#87939d;background:#202830}
+.stats-section-title{margin-top:14px;padding-top:11px;border-top:1px solid #214b6d;color:#a9dcff}
