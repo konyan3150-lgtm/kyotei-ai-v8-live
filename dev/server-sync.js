@@ -21,8 +21,8 @@
         let local=null;try{local=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
         const selected=choose(local,record);if(selected!==local){localStorage.setItem(key,JSON.stringify(selected));local?updated++:imported++}
       }
-      if(typeof renderStats==='function')renderStats();
-      if(typeof window.renderPredictionHistory==='function')window.renderPredictionHistory();
+      if((imported||updated)&&typeof draw==='function'&&typeof D!=='undefined'&&D&&typeof sid!=='undefined'&&sid)draw();
+      else{if(typeof renderStats==='function')renderStats();if(typeof window.renderPredictionHistory==='function')window.renderPredictionHistory()}
       const updatedAt=data.updated_at?new Date(data.updated_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
       if(el)el.textContent=`✓ 常時自動保存 接続｜${data.record_count||0}R｜${updatedAt}更新${imported||updated?`｜端末へ${imported+updated}件反映`:''}`;
       return{imported,updated}
