@@ -49,13 +49,13 @@ jobs:
         run: node scripts/update_server_predictions.mjs
       - name: Commit updated odds and predictions
         run: |
-          if git diff --quiet -- odds.json dev/odds.json dev/official-results.json dev/server-predictions.json; then
+          if git diff --quiet -- odds.json dev/odds.json dev/official-results.json dev/server-predictions.json dev/server-predictions-index.json dev/server-predictions-archive; then
             echo "No odds or prediction changes"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add odds.json dev/odds.json dev/official-results.json dev/server-predictions.json
+          git add odds.json dev/odds.json dev/official-results.json dev/server-predictions.json dev/server-predictions-index.json dev/server-predictions-archive
           git commit -m "chore: update live odds and predictions"
           git pull --rebase --autostash
           git push
