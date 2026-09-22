@@ -10,7 +10,7 @@
     const out=[];
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;
-      try{const x=JSON.parse(localStorage.getItem(key)||'null');if(x)out.push(x)}catch(e){}
+      try{const x=JSON.parse(localStorage.getItem(key)||'null');if(x?.source==='server')out.push(x)}catch(e){}
     }
     return out.sort((a,b)=>dateValue(b.date)-dateValue(a.date)||Number(b.race||0)-Number(a.race||0)||Number(b.stadium||0)-Number(a.stadium||0));
   }
