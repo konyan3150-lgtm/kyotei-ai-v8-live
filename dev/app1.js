@@ -63,15 +63,27 @@ function fillStatsBox(id,s){
   const hitRate=s.races?s.hits/s.races*100:0,roi=s.invest?s.payout/s.invest*100:0,profit=s.payout-s.invest;
   vals[0].textContent=s.races?hitRate.toFixed(1)+'%':'--';vals[1].textContent=s.invest?roi.toFixed(1)+'%':'--';vals[2].textContent=s.races+'R';vals[3].textContent='¥'+s.invest.toLocaleString();vals[4].textContent='¥'+s.payout.toLocaleString();vals[5].textContent=(profit<0?'-¥':'¥')+Math.abs(profit).toLocaleString()
 }
-function renderBaseStats(records){
-  const total={races:0,hits:0,invest:0,payout:0},sums={hit:{races:0,hits:0,invest:0,payout:0},balance:{races:0,hits:0,invest:0,payout:0},return:{races:0,hits:0,invest:0,payout:0}};
+function baseModeSummary(records,mode,recommendedOnly=false){
+  const sum={races:0,hits:0,invest:0,payout:0};
   for(const x of records){
-    const primary=x?.modes?.[x?.mode||'hit'];if(primary?.settled&&Number(primary.stake)){total.races++;if(primary.hit)total.hits++;total.invest+=Number(primary.stake||0);total.payout+=Number(primary.payout||0)}
-    for(const mode of Object.keys(sums)){const m=x?.modes?.[mode];if(!m?.settled||!Number(m.stake))continue;const s=sums[mode];s.races++;if(m.hit)s.hits++;s.invest+=Number(m.stake||0);s.payout+=Number(m.payout||0)}
+    if(x?.cancelled)continue;
+    const m=x?.modes?.[mode];
+    if(!m?.settled||m.skipped||!Number(m.stake))continue;
+    if(recommendedOnly&&x?.base_recommendations?.[mode]?.level!=='buy')continue;
+    sum.races++;if(m.hit)sum.hits++;sum.invest+=Number(m.stake||0);sum.payout+=Number(m.payout||0)
   }
-  fillStatsBox('baseStats',total);
+  return sum
+}
+function baseModeCards(sums,activeMode){
+  const labels={hit:'的中重視',balance:'バランス',return:'回収重視'};
+  return Object.entries(sums).map(([mode,s])=>{const hitRate=s.races?(s.hits/s.races*100).toFixed(1)+'%':'--',roi=s.invest?(s.payout/s.invest*100).toFixed(1)+'%':'--';return `<div class="modestat ${mode===activeMode?'active':''}"><small class="mode-name">${labels[mode]}</small><div class="mode-metrics"><div><span>的中率</span><b>${hitRate}</b></div><div><span>回収率</span><b class="mode-roi">${roi}</b></div></div><div class="mode-money"><span><em>投資</em><strong>¥${s.invest.toLocaleString()}</strong></span><span><em>払戻</em><strong>¥${s.payout.toLocaleString()}</strong></span></div><span class="mode-count">的中 ${s.hits}/${s.races}R</span></div>`}).join('')
+}
+function renderBaseStats(records){
+  const modes=['hit','balance','return'],sums=Object.fromEntries(modes.map(mode=>[mode,baseModeSummary(records,mode)])),recommendedSums=Object.fromEntries(modes.map(mode=>[mode,baseModeSummary(records,mode,true)]));
+  fillStatsBox('baseStats',sums[basePredictionMode]);
+  fillStatsBox('baseRecommendedStats',recommendedSums[basePredictionMode]);
   const labels={hit:'的中重視',balance:'バランス',return:'回収重視'},el=document.getElementById('baseModeStats');if(!el)return;
-  const cards=Object.entries(sums).map(([mode,s])=>{const hitRate=s.races?(s.hits/s.races*100).toFixed(1)+'%':'--',roi=s.invest?(s.payout/s.invest*100).toFixed(1)+'%':'--';return `<div class="modestat ${mode===basePredictionMode?'active':''}"><small class="mode-name">${labels[mode]}</small><div class="mode-metrics"><div><span>的中率</span><b>${hitRate}</b></div><div><span>回収率</span><b class="mode-roi">${roi}</b></div></div><div class="mode-money"><span><em>投資</em><strong>¥${s.invest.toLocaleString()}</strong></span><span><em>払戻</em><strong>¥${s.payout.toLocaleString()}</strong></span></div><span class="mode-count">的中 ${s.hits}/${s.races}R</span></div>`}).join('');
+  const cards=baseModeCards(sums,basePredictionMode),recommendedCards=baseModeCards(recommendedSums,basePredictionMode);
   const safe=v=>String(v??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
   const selected=records.find(x=>String(x?.date||'')===String(day())&&Number(x?.stadium)===Number(sid)&&Number(x?.race)===Number(rno));
   const date=String(day()).replace(/^(\d{4})(\d{2})(\d{2})$/,'$1/$2/$3'),venue=N?.[sid]||selected?.stadium_name||sid||'--',raceNo=Number(rno)||rno||'--';
@@ -85,7 +97,7 @@ function renderBaseStats(records){
     const rows=Object.keys(labels).map(mode=>{const m=modeData[mode],picks=Array.isArray(m?.picks)?m.picks:[];const pickHtml=picks.length?picks.map(p=>`<span class="${result&&String(p)===result?'winner':''}">${safe(p)}</span>`).join(''):`<span class="no-picks">記録なし</span>`;const status=!m?'<span class="audit-status">記録なし</span>':m.settled?(m.hit?'<span class="audit-status hit">的中</span>':'<span class="audit-status miss">不的中</span>'):'<span class="audit-status wait">判定待ち</span>';return `<div class="audit-row"><div class="audit-mode"><b>${labels[mode]}</b>${status}</div><div class="audit-picks">${pickHtml}</div></div>`}).join('');
     audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(raceNo)}R</b></div><div class="audit-result">結果 <strong>${safe(settled?(result||'--'):'未確定')}</strong></div><div class="audit-verdict ${verdictClass}">${safe(verdictText)}</div><div class="audit-label">保存されたV8買い目</div>${rows}</div>`
   }
-  el.innerHTML=cards;const auditEl=document.getElementById('baseSavedAudit');if(auditEl)auditEl.innerHTML=audit
+  el.innerHTML=cards;const recommendedEl=document.getElementById('baseRecommendedModeStats');if(recommendedEl)recommendedEl.innerHTML=recommendedCards;const auditEl=document.getElementById('baseSavedAudit');if(auditEl)auditEl.innerHTML=audit
 }
 function renderStats(){let total={races:0,hits:0,invest:0,payout:0},records=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith('kyotei_v8_dev_result_'))continue;let x;try{x=JSON.parse(localStorage.getItem(k)||'null')}catch(e){continue}if(x)records.push(x);if(x?.value_model_version!==3)continue;const primary=x?.value_modes?.[x?.value_mode||x?.mode||'hit'];if(!primary?.settled||primary?.skipped||!Number(primary?.stake))continue;total.races++;if(primary.hit)total.hits++;total.invest+=Number(primary.stake||0);total.payout+=Number(primary.payout||0)}fillStatsBox('valueStats',total);renderModeStats(records);renderBaseStats(records)}
 function transferRecords(){const records={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key||!key.startsWith('kyotei_v8_dev_result_'))continue;const value=localStorage.getItem(key);if(value!=null)records[key]=value}return records}
