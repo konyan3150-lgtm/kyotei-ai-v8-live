@@ -60,7 +60,8 @@ async function loadCourseStats(){
   const diag=document.getElementById('courseDiag');
   try{
     if(diag)diag.textContent='コース別成績：公式データ取得中…';
-    const res=await fetch(`course-stats.json?v=78&x=${Date.now()}`,{cache:'no-store'});
+    const cacheDay=typeof day==='function'?day():new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Tokyo'}).replaceAll('-','');
+    const res=await fetch(`course-stats.json?v=151&d=${cacheDay}`);
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     if(data?.schema!=='kyotei-course-stats'||!data.racers)throw new Error('データ形式不一致');
