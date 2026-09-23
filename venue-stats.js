@@ -25,7 +25,7 @@ function renderVenueTraits(){
 
 async function loadVenueStats(){
   const diag=document.getElementById('venueDiag');
-  try{if(diag)diag.textContent='会場特性：学習データ取得中…';const res=await fetch(`venue-stats.json?v=86&x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(data?.schema!=='kyotei-venue-stats'||!data.venues)throw new Error('データ形式不一致');venueStatsData=data;if(D&&sid){if(typeof autoSaveAllPredictions==='function')autoSaveAllPredictions();draw()}else renderVenueTraits()}catch(e){venueStatsData=null;if(diag)diag.textContent='会場特性：取得待ち｜'+e.message}}
+  try{if(diag)diag.textContent='会場特性：学習データ取得中…';const res=await fetch('venue-stats.json?v=151');if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(data?.schema!=='kyotei-venue-stats'||!data.venues)throw new Error('データ形式不一致');venueStatsData=data;if(D&&sid){if(typeof autoSaveAllPredictions==='function')autoSaveAllPredictions();draw()}else renderVenueTraits()}catch(e){venueStatsData=null;if(diag)diag.textContent='会場特性：取得待ち｜'+e.message}}
 
 const preVenueRace=race;
 race=function(r){venueCorrectionActive=false;preVenueRace(r);renderVenueTraits()};
