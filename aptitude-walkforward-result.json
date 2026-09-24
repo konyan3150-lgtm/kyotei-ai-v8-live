@@ -1,0 +1,32 @@
+{
+  "period": {
+    "start": "20260901",
+    "end": "20260923",
+    "days": 23
+  },
+  "method": "Leakage-safe walk-forward: each day uses aptitude data available only through the previous day. Other live corrections disabled to isolate aptitude.",
+  "baseline": {
+    "races": 3553,
+    "top1": 1981,
+    "hit6": 1151,
+    "top1_rate": 55.76,
+    "six_pick_hit_rate": 32.4
+  },
+  "walk_forward": {
+    "races": 3553,
+    "top1": 1983,
+    "hit6": 1166,
+    "top1_rate": 55.81,
+    "six_pick_hit_rate": 32.82
+  },
+  "delta_pp": {
+    "top1": 0.05,
+    "six_pick": 0.42
+  },
+  "prediction_change": {
+    "top1_count": 15,
+    "top1_rate": 0.42,
+    "six_pick_count": 936,
+    "six_pick_rate": 26.34
+  }
+}
