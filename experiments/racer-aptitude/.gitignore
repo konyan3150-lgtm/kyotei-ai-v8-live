@@ -1,0 +1,12 @@
+__pycache__/
+work/
+output/
+output-year/
+output-prehistory/
+output-prehistory-older/
+output-features/
+output-features-3y/
+output-backtest/
+output-backtest-3y/
+output-walk-forward/
+output-catchup/
