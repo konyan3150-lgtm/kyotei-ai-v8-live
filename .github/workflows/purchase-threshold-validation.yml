@@ -1,0 +1,27 @@
+name: Purchase threshold validation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/purchase-threshold-validation.yml"
+      - "scripts/validate_purchase_thresholds.mjs"
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/validate_purchase_thresholds.mjs 20260901 20260923
+      - name: Commit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add purchase-threshold-result.json
+          git diff --cached --quiet || (git commit -m "data: purchase threshold validation" && git push)
