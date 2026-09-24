@@ -6,6 +6,7 @@
   const SAFETY_FACTOR=.75;
   const EV_STAKES=[{min:1.30,yen:300},{min:1.15,yen:200},{min:1.00,yen:100}];
   const stakeForEv=ev=>EV_STAKES.find(x=>Number(ev)>=x.min)?.yen||0;
+  const stakeBadge=ev=>Number(ev)>=1.30?'<span class="ev-stake-badge ev-stake-strong">🔥 強く厚張り</span>':Number(ev)>=1.15?'<span class="ev-stake-badge ev-stake-thick">厚張り</span>':'<span class="ev-stake-badge ev-stake-normal">通常</span>';
   let oddsPayload=null,oddsStatus='loading';
 
   function currentOdds(){
@@ -34,7 +35,7 @@
     if(!value.available){el.innerHTML=`<div class="odds-wait">${oddsStatus==='loading'?'3連単オッズ取得中…':'3連単オッズ未取得｜期待値判定待機'}</div>`;return}
     const updated=value.record?.fetched_at?new Date(value.record.fetched_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
     if(!value.picks.length){el.innerHTML=`<div class="odds-head">期待値判定 <b>見送り</b><span>オッズ ${updated}更新</span></div><div class="value-empty">基準EV ${value.threshold.toFixed(2)}以上の買い目がありません。</div>`;return}
-    el.innerHTML=`<div class="odds-head">期待値買い目 <b>${value.picks.length}点</b><span>オッズ ${updated}更新</span></div><table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>推奨額</th></tr></thead><tbody>${value.picks.map(x=>`<tr><td>${x.combo}</td><td>${(x.safeProb*100).toFixed(1)}%</td><td>${x.odds.toFixed(1)}</td><td class="${x.ev>=1.15?'ev-high':''}">${x.ev.toFixed(2)}</td><td>¥${stakeForEv(x.ev).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">確率は安全率75%で計算｜EV別推奨額：1.00〜 ¥100 / 1.15〜 ¥200 / 1.30〜 ¥300｜最大4点</div>`
+    const strong=value.picks.some(x=>x.ev>=1.30),thick=value.picks.some(x=>x.ev>=1.15);el.innerHTML=`<div class="odds-head">期待値買い目 <b>${value.picks.length}点</b><span>オッズ ${updated}更新</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり</div>':thick?'<div class="ev-race-alert">厚張り候補あり</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${value.picks.map(x=>`<tr><td>${x.combo}</td><td>${(x.safeProb*100).toFixed(1)}%</td><td>${x.odds.toFixed(1)}</td><td class="${x.ev>=1.15?'ev-high':''}">${x.ev.toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${stakeForEv(x.ev).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">確率は安全率75%で計算｜EV別推奨額：1.00〜 ¥100 / 1.15〜 ¥200 / 1.30〜 ¥300｜最大4点</div>`
   }
 
   function renderBaseBetsPanel(rows){
