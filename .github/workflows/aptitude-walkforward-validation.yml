@@ -1,0 +1,32 @@
+name: Racer aptitude walk-forward validation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/aptitude-walkforward-validation.yml"
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Restore aptitude snapshot before backfill
+        run: git show 6446384c9d0dcb83ccfc7a5b29e8790f331f93da:racer-aptitude.json > racer-aptitude.old.json
+      - name: Run walk-forward validation
+        run: node scripts/compare_aptitude_walkforward.mjs racer-aptitude.old.json 20260901 20260923
+      - name: Commit result
+        run: |
+          rm -f racer-aptitude.old.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add aptitude-walkforward-result.json
+          git commit -m "analysis: aptitude walk-forward validation" || exit 0
+          git pull --rebase origin main
+          git push origin main
