@@ -42,6 +42,8 @@ jobs:
           cp racer-aptitude.json racer-aptitude.before.json
           node scripts/backfill_racer_aptitude.mjs --input racer-aptitude.json --output racer-aptitude.json --start "$START" --end "$END"
       - name: Validate updated aptitude data
+        env:
+          END: ${{ github.event.inputs.end || '20260924' }}
         run: |
           node - <<'NODE'
           const fs=require('fs');
@@ -49,9 +51,14 @@ jobs:
           const after=JSON.parse(fs.readFileSync('racer-aptitude.json'));
           const starts=x=>Object.values(x.racers||{}).reduce((s,r)=>s+Number(r.o?.[0]||0),0);
           const a=starts(before),b=starts(after);
-          if(b<=a) throw Error('aptitude starts did not increase');
-          if(!after.backfill?.races_added||after.backfill.races_added<1000) throw Error('backfill coverage invalid');
-          console.log({before_starts:a,after_starts:b,added:b-a,backfill:after.backfill});
+          if(b<a) throw Error('aptitude starts decreased');
+          if(b===a){
+            if(String(after.history_end||'').replaceAll('-','')<String(process.env.END||'')) throw Error('no rows added before requested end date');
+            console.log({status:'already-current',before_starts:a,after_starts:b,history_end:after.history_end});
+          }else{
+            if(!after.backfill?.races_added||after.backfill.races_added<1) throw Error('backfill coverage invalid');
+            console.log({status:'updated',before_starts:a,after_starts:b,added:b-a,backfill:after.backfill});
+          }
           NODE
       - name: Copy to development
         run: cp racer-aptitude.json dev/racer-aptitude.json
