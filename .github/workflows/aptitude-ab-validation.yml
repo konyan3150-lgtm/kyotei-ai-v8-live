@@ -2,6 +2,9 @@ name: Racer aptitude A-B validation
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/aptitude-ab-validation.yml"
 
 permissions:
   contents: write
