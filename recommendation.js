@@ -89,7 +89,16 @@
     box=document.createElement('div');box.id='baseRecommendationBox';box.className='recommendation-box';bets.insertAdjacentElement('beforebegin',box);return box
   }
   function boxHtml(title,recs,currentMode,stats){
-    const current=recs[currentMode]||recs.hit;
+    let current=recs[currentMode]||recs.hit;
+    // Legacy/synced records can contain a valid purchase level but a missing/zero score.
+    // Never render that contradictory state as "購入推奨 0/100"; rebuild a display score
+    // from the assessment inputs while preserving the recorded purchase level.
+    if(current&&current.level!=='none'&&Number(current.score||0)<=0){
+      const top=Number(current.top||0),gap=Number(current.gap||0),coverage=Number(current.coverage||0),hole=Number(current.hole||0);
+      let rebuilt=currentMode==='hit'?top*58+gap*85+coverage*.32:currentMode==='balance'?top*52+gap*72+coverage*.36:hole*80+top*34+coverage*.45;
+      if(!Number.isFinite(rebuilt)||rebuilt<=0)rebuilt=current.level==='buy'?70:current.level==='caution'?50:1;
+      current={...current,score:Math.max(1,Math.min(100,Math.round(rebuilt)))};
+    }
     const chips=MODES.map(m=>`<div class="recommend-chip ${m===currentMode?'active':''} ${recs[m]?.level||'none'}"><span>${LABELS[m]}</span><b>${LEVELS[recs[m]?.level]||'判定なし'}</b></div>`).join('');
     const statText=stats.races?`購入推奨のみ：${stats.races}R・的中率 ${stats.hitRate.toFixed(1)}%・回収率 ${stats.roi.toFixed(1)}%`:'購入推奨の確定実績は、これから蓄積されます';
     return `<div class="recommend-title"><span>${title}</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${Number(current.score||0)}</b>/100</div><ul>${(current.reasons||[]).map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
