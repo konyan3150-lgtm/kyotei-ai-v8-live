@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - ".github/workflows/aptitude-walkforward-validation.yml"
+      - "scripts/compare_aptitude_walkforward.mjs"
 permissions:
   contents: write
 jobs:
