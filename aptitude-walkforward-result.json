@@ -28,5 +28,19 @@
     "top1_rate": 0.42,
     "six_pick_count": 936,
     "six_pick_rate": 26.34
+  },
+  "money": {
+    "baseline": {
+      "invest": 2131800,
+      "return": 1447220,
+      "profit": -684580,
+      "roi": 67.89
+    },
+    "walk_forward": {
+      "invest": 2131800,
+      "return": 1458780,
+      "profit": -673020,
+      "roi": 68.43
+    }
   }
 }
