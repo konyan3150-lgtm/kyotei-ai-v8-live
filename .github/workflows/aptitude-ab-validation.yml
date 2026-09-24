@@ -1,0 +1,32 @@
+name: Racer aptitude A-B validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Restore pre-backfill aptitude snapshot
+        run: git show 6446384c9d0dcb83ccfc7a5b29e8790f331f93da:racer-aptitude.json > racer-aptitude.old.json
+      - name: Run isolated A-B validation
+        run: node scripts/compare_aptitude_ab.mjs racer-aptitude.old.json racer-aptitude.json 20260901 20260923
+      - name: Commit validation result
+        run: |
+          rm -f racer-aptitude.old.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add aptitude-ab-result.json
+          git commit -m "analysis: racer aptitude A-B validation" || exit 0
+          git pull --rebase origin main
+          git push origin main
