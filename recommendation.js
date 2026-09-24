@@ -55,6 +55,9 @@
     if(!openForSaving(r))return false;
     const key=resultStoreKey();let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}
     if(!rec||rec.settled)return false;
+    // Persist the purchase decision against the same odds snapshot as the saved EV picks.
+    const oddsAt=rec.odds_snapshot_at||null;
+    recs=Object.fromEntries(Object.entries(recs||{}).map(([mode,x])=>[mode,{...x,odds_snapshot_at:oddsAt}]));
     rec.recommendations=recs;rec.recommendation_version=3;
     rec.base_recommendations=baseRecs;rec.base_recommendation_version=1;
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
