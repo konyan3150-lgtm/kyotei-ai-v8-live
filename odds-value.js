@@ -4,6 +4,8 @@
   const POOL_LIMITS={hit:12,balance:40,return:120};
   const MAX_PICKS=4;
   const SAFETY_FACTOR=.75;
+  const EV_STAKES=[{min:1.30,yen:300},{min:1.15,yen:200},{min:1.00,yen:100}];
+  const stakeForEv=ev=>EV_STAKES.find(x=>Number(ev)>=x.min)?.yen||0;
   let oddsPayload=null,oddsStatus='loading';
 
   function currentOdds(){
@@ -52,7 +54,7 @@
     if(!currentOdds()||hasOfficialResult(r)||cancelledRace(r))return false;const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN;if(Number.isFinite(close)&&close<=Date.now())return false;
     let rec;const key=resultStoreKey();try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}if(!rec||rec.settled)return false;
     rec.value_modes=rec.value_modes||{};
-    for(const mode of ['hit','balance','return']){const v=valueCandidates(rows,mode),picks=v.picks.map(x=>x.combo);rec.value_modes[mode]={picks,stake:picks.length*100,settled:false,hit:false,payout:0,skipped:!picks.length,threshold:v.threshold,items:v.picks.map(x=>({combo:x.combo,prob:x.safeProb,odds:x.odds,ev:x.ev}))}}
+    for(const mode of ['hit','balance','return']){const v=valueCandidates(rows,mode),picks=v.picks.map(x=>x.combo);const items=v.picks.map(x=>({combo:x.combo,prob:x.safeProb,odds:x.odds,ev:x.ev,stake:stakeForEv(x.ev)})),stake=items.reduce((s,x)=>s+x.stake,0);rec.value_modes[mode]={picks,stake,settled:false,hit:false,payout:0,skipped:!picks.length,threshold:v.threshold,stake_strategy:'ev_tier_v1',items}}
     const oddsAt=currentOdds().fetched_at||new Date().toISOString();
     rec.odds_snapshot_at=oddsAt;rec.value_mode=valuePredictionMode;rec.value_model_version=3;rec.value_saved_at=new Date().toISOString();
     // Keep the saved EV picks tied to the exact odds snapshot used for the on-screen EV calculation.
@@ -63,7 +65,7 @@
   savePredictionSnapshot=function(r,rows){const ok=baseSavePredictionSnapshot(r,rows);saveValueSnapshot(r,rows);return ok};
 
   const baseSettlePredictionKey=settlePredictionKey;
-  settlePredictionKey=function(r,key){const changed=baseSettlePredictionKey(r,key),t=r?.result?.payouts?.trifecta?.[0];if(!t)return changed;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return changed}if(!rec?.value_modes)return changed;const combo=String(t.combination||'').trim(),amount=Number(t.amount||0);for(const mode of Object.keys(rec.value_modes)){const m=rec.value_modes[mode];m.settled=true;m.result=combo;m.hit=Array.isArray(m.picks)&&m.picks.includes(combo);m.payout=m.hit?amount:0}try{localStorage.setItem(key,JSON.stringify(rec))}catch(e){}return true};
+  settlePredictionKey=function(r,key){const changed=baseSettlePredictionKey(r,key),t=r?.result?.payouts?.trifecta?.[0];if(!t)return changed;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return changed}if(!rec?.value_modes)return changed;const combo=String(t.combination||'').trim(),amount=Number(t.amount||0);for(const mode of Object.keys(rec.value_modes)){const m=rec.value_modes[mode];m.settled=true;m.result=combo;m.hit=Array.isArray(m.picks)&&m.picks.includes(combo);const hitItem=Array.isArray(m.items)?m.items.find(x=>x.combo===combo):null;m.payout=m.hit?amount*(Number(hitItem?.stake||100)/100):0}try{localStorage.setItem(key,JSON.stringify(rec))}catch(e){}return true};
 
   async function loadLiveOdds(){
     if(typeof dateOffset!=='undefined'&&dateOffset!==0){oddsStatus='unavailable';return}
