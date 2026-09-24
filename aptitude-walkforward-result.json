@@ -42,5 +42,26 @@
       "profit": -673020,
       "roi": 68.43
     }
+  },
+  "purchase_recommended_hit_mode": {
+    "note": "Historical proxy for V8 hit-mode purchase recommendation using the same top>=0.62 and gap>=0.25 thresholds. Historical coverage is unavailable, so the live coverage>=82 gate cannot be reconstructed here.",
+    "baseline": {
+      "races": 1432,
+      "hits": 590,
+      "invest": 859200,
+      "return": 616800,
+      "hit_rate": 41.2,
+      "profit": -242400,
+      "roi": 71.79
+    },
+    "walk_forward": {
+      "races": 1435,
+      "hits": 591,
+      "invest": 861000,
+      "return": 610170,
+      "hit_rate": 41.18,
+      "profit": -250830,
+      "roi": 70.87
+    }
   }
 }
