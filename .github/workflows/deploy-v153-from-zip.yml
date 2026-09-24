@@ -2,11 +2,6 @@ name: Deploy V8 LIVE 153 from uploaded ZIP
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - V8-LIVE-153-complete.zip
-      - .github/workflows/deploy-v153-from-zip.yml
 
 permissions:
   contents: write
