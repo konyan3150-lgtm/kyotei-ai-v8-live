@@ -46,6 +46,7 @@ jobs:
           done
           install -m 0644 /tmp/v153/scripts/racer_aptitude_features.mjs scripts/racer_aptitude_features.mjs
           install -m 0644 /tmp/v153/scripts/update_server_predictions.mjs scripts/update_server_predictions.mjs
+          mkdir -p experiments
           rm -rf experiments/racer-aptitude
           cp -a /tmp/v153/experiments/racer-aptitude experiments/racer-aptitude
           rm -f V8-LIVE-153-complete.zip
