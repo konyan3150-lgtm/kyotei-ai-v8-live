@@ -24,9 +24,10 @@ for(let d=date(start);d<=date(end);d=add(d,1)){
   const program=await pr.json(),results=await rr.json(),rm=new Map((results.results||[]).map(x=>[`${Number(x.stadium_number)}-${Number(x.number)}`,x]));
   days++;
   for(const[sid,sv]of Object.entries(program?.programs?.stadiums||{}))for(const[rn,r]of Object.entries(sv?.races||{})){
-    const res=rm.get(`${Number(sid)}-${Number(rn)}`),finish=(res?.racers||[]).slice().sort((x,y)=>Number(x.place_number)-Number(y.place_number));
-    if(finish.length<3||!Number.isFinite(Number(finish[0]?.place_number)))continue;
-    const winner=String(finish[0].course_number||finish[0].boat_number||''),combo=finish.slice(0,3).map(x=>String(x.course_number||x.boat_number||'')).join('-');
+    const res=rm.get(`${Number(sid)}-${Number(rn)}`),boats=(res?.boats||res?.racers||[]),finish=boats.filter(x=>Number.isFinite(Number(x.racer_place_number??x.place_number))&&Number(x.racer_place_number??x.place_number)>=1).slice().sort((x,y)=>Number(x.racer_place_number??x.place_number)-Number(y.racer_place_number??y.place_number));
+    if(finish.length<3)continue;
+    const lane=x=>String(x.racer_course_number??x.course_number??x.boat_number??'');
+    const winner=lane(finish[0]),combo=finish.slice(0,3).map(lane).join('-');
     const ra=predictionRows(A,r,sid,rn,day),rb=predictionRows(B,r,sid,rn,day);if(ra.length!==6||rb.length!==6)continue;
     const top=x=>x.slice().sort((u,v)=>v.p[0]-u.p[0])[0]?.k,ta=top(ra),tb=top(rb),ba=makeBets(ra,6,'hit').map(x=>x.combo),bb=makeBets(rb,6,'hit').map(x=>x.combo);
     sa.races++;sb.races++;if(ta===winner)sa.top1++;if(tb===winner)sb.top1++;if(ba.includes(combo))sa.hit6++;if(bb.includes(combo))sb.hit6++;if(ta!==tb)sa.changedTop1++;if(JSON.stringify(ba)!==JSON.stringify(bb))sa.changedBets++;compared++;
@@ -34,5 +35,6 @@ for(let d=date(start);d<=date(end);d=add(d,1)){
   console.log(day,'races',compared);
 }
 const pct=(n,d)=>d?+(n/d*100).toFixed(2):0;
+if(compared===0)throw Error('No completed races were joined; result schema mismatch');
 const out={period:{start,end,days},note:'Isolated aptitude A/B: course/venue/technique/exhibition/live factors disabled. Fresh snapshot includes later history, so this measures sensitivity, not a leakage-free causal uplift.',old:{...sa,top1_rate:pct(sa.top1,sa.races),six_pick_hit_rate:pct(sa.hit6,sa.races)},fresh:{...sb,top1_rate:pct(sb.top1,sb.races),six_pick_hit_rate:pct(sb.hit6,sb.races)},delta_pp:{top1:+(pct(sb.top1,sb.races)-pct(sa.top1,sa.races)).toFixed(2),six_pick:+(pct(sb.hit6,sb.races)-pct(sa.hit6,sa.races)).toFixed(2)},prediction_change:{top1_rate:pct(sa.changedTop1,sa.races),six_pick_set_rate:pct(sa.changedBets,sa.races)}};
 fs.writeFileSync(ROOT+'aptitude-ab-result.json',JSON.stringify(out,null,2));console.log(JSON.stringify(out,null,2));
