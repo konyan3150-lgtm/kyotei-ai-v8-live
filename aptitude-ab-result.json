@@ -6,29 +6,29 @@
   },
   "note": "Isolated aptitude A/B: course/venue/technique/exhibition/live factors disabled. Fresh snapshot includes later history, so this measures sensitivity, not a leakage-free causal uplift.",
   "old": {
-    "races": 0,
-    "top1": 0,
-    "hit6": 0,
-    "changedTop1": 0,
-    "changedBets": 0,
-    "top1_rate": 0,
-    "six_pick_hit_rate": 0
+    "races": 3553,
+    "top1": 1981,
+    "hit6": 1151,
+    "changedTop1": 83,
+    "changedBets": 3070,
+    "top1_rate": 55.76,
+    "six_pick_hit_rate": 32.4
   },
   "fresh": {
-    "races": 0,
-    "top1": 0,
-    "hit6": 0,
+    "races": 3553,
+    "top1": 2003,
+    "hit6": 1185,
     "changedTop1": 0,
     "changedBets": 0,
-    "top1_rate": 0,
-    "six_pick_hit_rate": 0
+    "top1_rate": 56.37,
+    "six_pick_hit_rate": 33.35
   },
   "delta_pp": {
-    "top1": 0,
-    "six_pick": 0
+    "top1": 0.61,
+    "six_pick": 0.95
   },
   "prediction_change": {
-    "top1_rate": 0,
-    "six_pick_set_rate": 0
+    "top1_rate": 2.34,
+    "six_pick_set_rate": 86.41
   }
 }
