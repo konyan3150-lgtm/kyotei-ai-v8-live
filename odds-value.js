@@ -53,7 +53,10 @@
     let rec;const key=resultStoreKey();try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}if(!rec||rec.settled)return false;
     rec.value_modes=rec.value_modes||{};
     for(const mode of ['hit','balance','return']){const v=valueCandidates(rows,mode),picks=v.picks.map(x=>x.combo);rec.value_modes[mode]={picks,stake:picks.length*100,settled:false,hit:false,payout:0,skipped:!picks.length,threshold:v.threshold,items:v.picks.map(x=>({combo:x.combo,prob:x.safeProb,odds:x.odds,ev:x.ev}))}}
-    rec.odds_snapshot_at=currentOdds().fetched_at||new Date().toISOString();rec.value_mode=valuePredictionMode;rec.value_model_version=3;
+    const oddsAt=currentOdds().fetched_at||new Date().toISOString();
+    rec.odds_snapshot_at=oddsAt;rec.value_mode=valuePredictionMode;rec.value_model_version=3;rec.value_saved_at=new Date().toISOString();
+    // Keep the saved EV picks tied to the exact odds snapshot used for the on-screen EV calculation.
+    // recommendation.js will stamp the matching recommendation with this same odds timestamp.
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
   }
   const baseSavePredictionSnapshot=savePredictionSnapshot;
