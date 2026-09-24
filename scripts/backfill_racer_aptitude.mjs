@@ -2,7 +2,6 @@
 import fs from 'node:fs';
 
 const args=Object.fromEntries(process.argv.slice(2).map((x,i,a)=>x.startsWith('--')?[x.slice(2),a[i+1]&&!a[i+1].startsWith('--')?a[i+1]:true]:null).filter(Boolean));
-const input=args.input||'racer-aptitude.json', output=args.output||input;
 const jstDay=(offset=0)=>{const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo'}).format(new Date());const d=new Date(p+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+offset);return d.toISOString().slice(0,10).replaceAll('-','')};
 const input=args.input||'racer-aptitude.json', output=args.output||input;
 const basePreview=JSON.parse(fs.readFileSync(input,'utf8'));
