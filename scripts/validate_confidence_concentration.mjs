@@ -7,3 +7,11 @@ for(let d=dt(start);d<=dt(end);d=new Date(d.getTime()+86400000)){const day=ymd(d
 rows.sort((a,b)=>b.score-a.score);const out=[];
 for(const rate of rates){const xs=rows.slice(0,Math.round(rows.length*rate/100));for(const n of points)for(const budget of budgets){let hit=0,ret=0,invest=0;for(const x of xs){const bets=makeBets(x.pr,6,'hit').slice(0,n).map(z=>z.combo),unit=Math.floor(budget/n/100)*100;if(unit<100)continue;invest+=unit*n;if(bets.includes(x.combo)){hit++;ret+=x.yen*unit/100}}out.push({recommend_rate:rate,points:n,budget_per_race:budget,races:xs.length,hits:hit,hit_rate:+(100*hit/xs.length).toFixed(2),invest,return:ret,profit:ret-invest,roi:+(100*ret/invest).toFixed(2)})}}
 out.sort((a,b)=>b.roi-a.roi);fs.writeFileSync(ROOT+'confidence-concentration-result.json',JSON.stringify({period:{start,end},total_races:rows.length,results:out},null,2));console.log(JSON.stringify(out.slice(0,15),null,2));
+
+const weighted=[];
+const patterns={flat:[1,1,1,1],top_heavy:[3,1,1,1],descending:[4,3,2,1],strong_top2:[3,2,1,1]};
+for(const rate of [5,10,15,20]){const xs=rows.slice(0,Math.round(rows.length*rate/100));for(const [name,w] of Object.entries(patterns)){let invest=0,ret=0,hits=0;for(const x of xs){const bets=makeBets(x.pr,6,'hit').slice(0,4).map(z=>z.combo);const units=w.map(v=>v*100);invest+=units.reduce((a,b)=>a+b,0);const i=bets.indexOf(x.combo);if(i>=0){hits++;ret+=x.yen*units[i]/100}}weighted.push({recommend_rate:rate,pattern:name,races:xs.length,hits,hit_rate:+(100*hits/xs.length).toFixed(2),invest,return:ret,profit:ret-invest,roi:+(100*ret/invest).toFixed(2)})}
+}
+weighted.sort((a,b)=>b.roi-a.roi);
+fs.writeFileSync(ROOT+'confidence-weighted-result.json',JSON.stringify({period:{start,end},note:'4-point bets with rank-based stake weighting; 100-yen units.',results:weighted},null,2));
+console.log('weighted',JSON.stringify(weighted.slice(0,12),null,2));
