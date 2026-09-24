@@ -1,0 +1,79 @@
+name: Deploy V8 LIVE 153 from uploaded ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - V8-LIVE-153-complete.zip
+      - .github/workflows/deploy-v153-from-zip.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-v8-live-153
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract the verified V153 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_commit="$(git log --all --format=%H -- V8-LIVE-153-complete.zip | head -1)"
+          test -n "$bundle_commit"
+          git show "$bundle_commit:V8-LIVE-153-complete.zip" > /tmp/v153.zip
+          test "$(sha256sum /tmp/v153.zip | awk '{print $1}')" = "531f92c339a3f377768fcd0cd430c0567b47f5a670e70ef67e3b9906e2f64093"
+          mkdir -p /tmp/v153
+          unzip -q /tmp/v153.zip -d /tmp/v153
+
+      - name: Integrate code without replacing accumulated results
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in app1.js app2.js index.html racer-aptitude.js racer-aptitude.json v8_model_aptitude.json; do
+            install -m 0644 "/tmp/v153/$file" "$file"
+          done
+          for file in dev/app1.js dev/app2.js dev/index.html; do
+            install -m 0644 "/tmp/v153/$file" "$file"
+          done
+          install -m 0644 /tmp/v153/scripts/racer_aptitude_features.mjs scripts/racer_aptitude_features.mjs
+          install -m 0644 /tmp/v153/scripts/update_server_predictions.mjs scripts/update_server_predictions.mjs
+          rm -rf experiments/racer-aptitude
+          cp -a /tmp/v153/experiments/racer-aptitude experiments/racer-aptitude
+          rm -f V8-LIVE-153-complete.zip
+
+      - name: Validate JavaScript and server prediction
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check racer-aptitude.js
+          node --check app1.js
+          node --check app2.js
+          node --check dev/app1.js
+          node --check dev/app2.js
+          node --check scripts/racer_aptitude_features.mjs
+          node --check scripts/update_server_predictions.mjs
+          node scripts/update_server_predictions.mjs --self-test
+          node -e "for (const f of ['racer-aptitude.json','v8_model_aptitude.json','dev/official-results.json','dev/server-predictions.json','dev/server-predictions-index.json']) JSON.parse(require('fs').readFileSync(f,'utf8'))"
+
+      - name: Commit V8 LIVE 153
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then
+            echo "V8 LIVE 153 is already deployed"
+            exit 0
+          fi
+          git commit -m "release: deploy V8 LIVE 153"
+          git push origin HEAD:main
