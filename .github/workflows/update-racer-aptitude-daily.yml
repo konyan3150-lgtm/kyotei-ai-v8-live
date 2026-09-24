@@ -29,7 +29,19 @@ jobs:
       - name: Add newly settled race results
         run: |
           cp racer-aptitude.json racer-aptitude.before.json
-          node scripts/backfill_racer_aptitude.mjs --input racer-aptitude.json --output racer-aptitude.json --min-races 1 --min-rows 1
+          # Temporary network/API errors are retried and do not become a failure email immediately.
+          for attempt in 1 2 3; do
+            cp racer-aptitude.before.json racer-aptitude.json
+            if node scripts/backfill_racer_aptitude.mjs --input racer-aptitude.json --output racer-aptitude.json --min-races 1 --min-rows 1; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Temporary update failure (attempt $attempt/3); retrying..."
+              sleep 60
+            fi
+          done
+          echo "::error::Racer aptitude update failed 3 times. Manual investigation required."
+          exit 1
       - name: Validate and sync development copy
         run: |
           node - <<'NODE'
