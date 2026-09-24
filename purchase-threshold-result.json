@@ -1,0 +1,100 @@
+{
+  "period": {
+    "start": "20260901",
+    "end": "20260923"
+  },
+  "total_races": 3553,
+  "method": "Rank races by V8 hit-mode confidence (top*58 + gap*85), then test top N% as purchase recommendations. Six bets x 100 yen.",
+  "results": [
+    {
+      "recommend_rate": 5,
+      "races": 178,
+      "hits": 85,
+      "hit_rate": 47.75,
+      "invest": 106800,
+      "return": 78920,
+      "profit": -27880,
+      "roi": 73.9
+    },
+    {
+      "recommend_rate": 10,
+      "races": 355,
+      "hits": 161,
+      "hit_rate": 45.35,
+      "invest": 213000,
+      "return": 143600,
+      "profit": -69400,
+      "roi": 67.42
+    },
+    {
+      "recommend_rate": 15,
+      "races": 533,
+      "hits": 231,
+      "hit_rate": 43.34,
+      "invest": 319800,
+      "return": 213990,
+      "profit": -105810,
+      "roi": 66.91
+    },
+    {
+      "recommend_rate": 20,
+      "races": 711,
+      "hits": 307,
+      "hit_rate": 43.18,
+      "invest": 426600,
+      "return": 294690,
+      "profit": -131910,
+      "roi": 69.08
+    },
+    {
+      "recommend_rate": 25,
+      "races": 888,
+      "hits": 385,
+      "hit_rate": 43.36,
+      "invest": 532800,
+      "return": 381580,
+      "profit": -151220,
+      "roi": 71.62
+    },
+    {
+      "recommend_rate": 30,
+      "races": 1066,
+      "hits": 456,
+      "hit_rate": 42.78,
+      "invest": 639600,
+      "return": 444630,
+      "profit": -194970,
+      "roi": 69.52
+    },
+    {
+      "recommend_rate": 35,
+      "races": 1244,
+      "hits": 526,
+      "hit_rate": 42.28,
+      "invest": 746400,
+      "return": 528350,
+      "profit": -218050,
+      "roi": 70.79
+    },
+    {
+      "recommend_rate": 40,
+      "races": 1421,
+      "hits": 599,
+      "hit_rate": 42.15,
+      "invest": 852600,
+      "return": 620310,
+      "profit": -232290,
+      "roi": 72.76
+    },
+    {
+      "recommend_rate": 50,
+      "races": 1777,
+      "hits": 731,
+      "hit_rate": 41.14,
+      "invest": 1066200,
+      "return": 771580,
+      "profit": -294620,
+      "roi": 72.37
+    }
+  ]
+}
