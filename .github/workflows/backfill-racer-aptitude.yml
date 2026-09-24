@@ -1,0 +1,66 @@
+name: Backfill racer aptitude history
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: First missing JST date (YYYYMMDD)
+        required: true
+        default: "20250730"
+      end:
+        description: Last JST date (YYYYMMDD)
+        required: true
+        default: "20260924"
+  push:
+    paths:
+      - "scripts/backfill_racer_aptitude.mjs"
+      - ".github/workflows/backfill-racer-aptitude.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: racer-aptitude-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Parser self-test
+        run: node scripts/backfill_racer_aptitude.mjs --self-test
+      - name: Backfill missing race history
+        env:
+          START: ${{ github.event.inputs.start || '20250730' }}
+          END: ${{ github.event.inputs.end || '20260924' }}
+        run: |
+          cp racer-aptitude.json racer-aptitude.before.json
+          node scripts/backfill_racer_aptitude.mjs --input racer-aptitude.json --output racer-aptitude.json --start "$START" --end "$END"
+      - name: Validate updated aptitude data
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const before=JSON.parse(fs.readFileSync('racer-aptitude.before.json'));
+          const after=JSON.parse(fs.readFileSync('racer-aptitude.json'));
+          const starts=x=>Object.values(x.racers||{}).reduce((s,r)=>s+Number(r.o?.[0]||0),0);
+          const a=starts(before),b=starts(after);
+          if(b<=a) throw Error('aptitude starts did not increase');
+          if(!after.backfill?.races_added||after.backfill.races_added<1000) throw Error('backfill coverage invalid');
+          console.log({before_starts:a,after_starts:b,added:b-a,backfill:after.backfill});
+          NODE
+      - name: Copy to development
+        run: cp racer-aptitude.json dev/racer-aptitude.json
+      - name: Commit verified backfill
+        run: |
+          rm -f racer-aptitude.before.json
+          if git diff --quiet -- racer-aptitude.json dev/racer-aptitude.json; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add racer-aptitude.json dev/racer-aptitude.json
+          git commit -m "data: backfill racer aptitude through 2026-09-24"
+          git push
