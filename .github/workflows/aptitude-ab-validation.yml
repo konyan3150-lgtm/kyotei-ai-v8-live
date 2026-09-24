@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - ".github/workflows/aptitude-ab-validation.yml"
+      - "scripts/compare_aptitude_ab.mjs"
 
 permissions:
   contents: write
