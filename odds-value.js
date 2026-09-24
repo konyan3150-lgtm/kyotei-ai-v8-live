@@ -28,9 +28,18 @@
   window.valueAssessmentForMode=function(mode,rows){return valueCandidates(rows,mode)};
   function cancelledRace(r){return typeof isRaceCancelled==='function'&&isRaceCancelled(r,D?.programs?.stadiums?.[sid]?.races)}
 
+  function savedValueMode(){
+    try{const rec=JSON.parse(localStorage.getItem(resultStoreKey())||'null');return rec?.value_modes?.[valuePredictionMode]||null}catch(e){return null}
+  }
+  function renderSavedValueBets(saved){
+    const el=document.getElementById('bets');if(!el||!saved)return false;
+    const items=Array.isArray(saved.items)?saved.items:[];if(!items.length)return false;
+    const strong=items.some(x=>Number(x.ev)>=1.30),thick=items.some(x=>Number(x.ev)>=1.15);
+    el.innerHTML=`<div class="odds-head">保存済み期待値買い目 <b>${items.length}点</b><span>締切前保存データ</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり（保存時）</div>':thick?'<div class="ev-race-alert">厚張り候補あり（保存時）</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${items.map(x=>`<tr><td>${x.combo}</td><td>${(Number(x.prob||0)*100).toFixed(1)}%</td><td>${Number(x.odds||0).toFixed(1)}</td><td class="${Number(x.ev)>=1.15?'ev-high':''}">${Number(x.ev||0).toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${Number(x.stake||stakeForEv(x.ev)).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">終了済みレース：締切前に保存したオッズ・EVから表示</div>`;return true
+  }
   function renderValueBets(rows){
     const el=document.getElementById('bets');if(!el)return;
-    const r=D?.programs?.stadiums?.[sid]?.races?.[rno];if(cancelledRace(r)){el.innerHTML='<div class="odds-wait">開催中止のため買い目対象外</div>';return}
+    const r=D?.programs?.stadiums?.[sid]?.races?.[rno];if(cancelledRace(r)){el.innerHTML='<div class="odds-wait">開催中止のため買い目対象外</div>';return}const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN;if((hasOfficialResult(r)||(Number.isFinite(close)&&close<=Date.now()))&&renderSavedValueBets(savedValueMode()))return;
     const value=valueCandidates(rows,valuePredictionMode);
     if(!value.available){el.innerHTML=`<div class="odds-wait">${oddsStatus==='loading'?'3連単オッズ取得中…':'3連単オッズ未取得｜期待値判定待機'}</div>`;return}
     const updated=value.record?.fetched_at?new Date(value.record.fetched_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
