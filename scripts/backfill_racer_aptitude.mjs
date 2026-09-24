@@ -3,7 +3,11 @@ import fs from 'node:fs';
 
 const args=Object.fromEntries(process.argv.slice(2).map((x,i,a)=>x.startsWith('--')?[x.slice(2),a[i+1]&&!a[i+1].startsWith('--')?a[i+1]:true]:null).filter(Boolean));
 const input=args.input||'racer-aptitude.json', output=args.output||input;
-const start=args.start||'20250730', end=args.end||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo'}).format(new Date()).replaceAll('-','');
+const jstDay=(offset=0)=>{const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo'}).format(new Date());const d=new Date(p+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+offset);return d.toISOString().slice(0,10).replaceAll('-','')};
+const input=args.input||'racer-aptitude.json', output=args.output||input;
+const basePreview=JSON.parse(fs.readFileSync(input,'utf8'));
+const nextDay=s=>{const x=String(s||'').replaceAll('-','');if(!/^\\d{8}$/.test(x))return null;const d=new Date(x.slice(0,4)+'-'+x.slice(4,6)+'-'+x.slice(6,8)+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+1);return d.toISOString().slice(0,10).replaceAll('-','')};
+const start=args.start||nextDay(basePreview.history_end)||'20250730', end=args.end||jstDay(-1);
 const API='https://boatraceopenapi.github.io/results/v3';
 const blank=()=>[0,0,0,0,0,0,0,0,0];
 const add=(a,place,st)=>{a=a||blank();a[0]++;if(Number.isFinite(place)&&place>=1&&place<=6){a[1]++;if(place===1)a[2]++;if(place<=2)a[3]++;if(place<=3)a[4]++;a[5]+=place}if(Number.isFinite(st)){a[6]++;a[7]+=st;a[8]+=st*st}return a};
@@ -43,7 +47,7 @@ async function main(){
   const base=JSON.parse(fs.readFileSync(input,'utf8'));if(base.history_end&&String(base.history_end).replaceAll('-','')>=end){console.log('already current through '+base.history_end);return}
   const delta={racers:{},global_course:{},races:0,boat_rows:0};let days=0,missing=0;
   for(const day of dayIter(start,end)){const p=await fetchDay(day);days++;if(p)accumulate(delta,p);else missing++;if(days%30===0)console.log(`days=${days} races=${delta.races} rows=${delta.boat_rows} missing=${missing}`)}
-  if(delta.races<1000||delta.boat_rows<5000)throw Error(`coverage too low: races=${delta.races} rows=${delta.boat_rows}`);
+  const minRaces=Number(args['min-races']??1),minRows=Number(args['min-rows']??1);if(delta.races<minRaces||delta.boat_rows<minRows)throw Error(`coverage too low: races=${delta.races} rows=${delta.boat_rows}`);
   const merged=merge(base,delta),tmp=output+'.tmp';fs.writeFileSync(tmp,JSON.stringify(merged));JSON.parse(fs.readFileSync(tmp,'utf8'));fs.renameSync(tmp,output);
   console.log(`wrote ${output}: ${start}-${end}, races_added=${delta.races}, rows_added=${delta.boat_rows}, missing_days=${missing}`)
 }
