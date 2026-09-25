@@ -22,7 +22,7 @@ function renderModeStats(records){
   const sums={hit:{races:0,hits:0,invest:0,payout:0},balance:{races:0,hits:0,invest:0,payout:0},return:{races:0,hits:0,invest:0,payout:0}};
   for(const x of records){
     if(x?.source!=='server')continue;
-    const modeSet=x?.value_model_version===3&&x?.value_modes&&typeof x.value_modes==='object'?x.value_modes:null;
+    const modeSet=x?.Number(x?.value_model_version)>=3&&x?.value_modes&&typeof x.value_modes==='object'?x.value_modes:null;
     if(modeSet&&typeof modeSet==='object'){
       for(const mode of Object.keys(sums)){
         const m=modeSet[mode];if(!m?.settled||m.skipped||!Number(m.stake))continue;
@@ -45,7 +45,7 @@ function renderModeStats(records){
   if(!selected){
     audit=`<div class="modeaudit"><div class="audit-title"><span>選択中のレース</span><b>${safe(date)} ${safe(venue)} ${safe(race)}R</b></div><div class="audit-empty-note">このレースは、締切前に保存された買い目がありません。</div></div>`
   }else{
-    const modeData=selected.value_model_version===3&&selected.value_modes&&typeof selected.value_modes==='object'?selected.value_modes:{};
+    const modeData=selected.Number(x?.value_model_version)>=3&&selected.value_modes&&typeof selected.value_modes==='object'?selected.value_modes:{};
     const result=String(selected.result||Object.values(modeData).find(m=>m?.result)?.result||'').trim();
     const settled=!!selected.settled||Object.values(modeData).some(m=>m?.settled);
     const recorded=Object.values(modeData).some(m=>m&&!m.skipped&&Array.isArray(m.picks)),modeSettled=Object.values(modeData).some(m=>m?.settled&&!m.skipped),hitModes=Object.keys(labels).filter(mode=>modeData[mode]?.settled&&modeData[mode]?.hit);
