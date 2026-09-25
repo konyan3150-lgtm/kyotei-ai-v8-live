@@ -39,7 +39,7 @@
   }
   function renderValueBets(rows){
     const el=document.getElementById('bets');if(!el)return;
-    const r=D?.programs?.stadiums?.[sid]?.races?.[rno];if(cancelledRace(r)){el.innerHTML='<div class="odds-wait">開催中止のため買い目対象外</div>';return}const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN;if((hasOfficialResult(r)||(Number.isFinite(close)&&close<=Date.now()))&&renderSavedValueBets(savedValueMode()))return;
+    const r=D?.programs?.stadiums?.[sid]?.races?.[rno];if(cancelledRace(r)){el.innerHTML='<div class="odds-wait">開催中止のため買い目対象外</div>';return}const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN,official=!!r?.result?.payouts?.trifecta?.[0]||(typeof hasOfficialResult==='function'&&hasOfficialResult(r)),closed=official||(Number.isFinite(close)&&close<=Date.now());if(closed){const saved=savedValueMode();if(renderSavedValueBets(saved))return;el.innerHTML='<div class="odds-wait">締切済み｜締切前の保存買い目がありません</div>';return}
     const value=valueCandidates(rows,valuePredictionMode);
     if(!value.available){el.innerHTML=`<div class="odds-wait">${oddsStatus==='loading'?'3連単オッズ取得中…':'3連単オッズ未取得｜期待値判定待機'}</div>`;return}
     const updated=value.record?.fetched_at?new Date(value.record.fetched_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
