@@ -18,7 +18,8 @@
     const record=currentOdds(),threshold=EV_THRESHOLDS[mode]||1.15;
     if(!record)return{available:false,status:oddsStatus,threshold,picks:[],record:null};
     const calibrated=typeof calibratedPredictionRows==='function'?calibratedPredictionRows(rows):rows;
-    let all=[];for(const x of calibrated)for(const y of calibrated)for(const z of calibrated){if(x.k===y.k||x.k===z.k||y.k===z.k)continue;const raw=Math.max(1e-12,Number(x.p?.[0]))*Math.max(1e-12,Number(y.p?.[1]))*Math.max(1e-12,Number(z.p?.[2]));all.push({combo:`${x.k}-${y.k}-${z.k}`,boats:[x.k,y.k,z.k],raw})}
+    const strength=new Map(calibrated.slice().sort((a,b)=>weightedV8Total(b.p)-weightedV8Total(a.p)).map((z,i)=>[z.k,i]));
+    let all=[];for(const x of calibrated)for(const y of calibrated)for(const z of calibrated){if(x.k===y.k||x.k===z.k||y.k===z.k)continue;const raw=Math.max(1e-12,Number(x.p?.[0]))*Math.max(1e-12,Number(y.p?.[1]))*Math.max(1e-12,Number(z.p?.[2]));all.push({combo:`${x.k}-${y.k}-${z.k}`,boats:[x.k,y.k,z.k],ranks:[strength.get(x.k)||0,strength.get(y.k)||0,strength.get(z.k)||0],raw})}
     const total=all.reduce((s,x)=>s+x.raw,0)||1;all=all.map(x=>{const odds=oddsFor(record,x.combo),prob=x.raw/total,safeProb=prob*SAFETY_FACTOR;return{...x,prob,safeProb,odds,ev:safeProb*odds}}).filter(x=>x.odds>0&&x.prob>=.002);
     const favorite=rows.slice().sort((a,b)=>Number(b.p?.[0]||0)-Number(a.p?.[0]||0))[0]?.k;
     const candidates=mode==='hit'?all.filter(x=>x.boats?.[0]===favorite&&x.ranks?.[1]<=3&&x.ranks?.[2]<=4):all;
