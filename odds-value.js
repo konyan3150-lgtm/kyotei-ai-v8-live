@@ -17,7 +17,9 @@
   function valueCandidates(rows,mode){
     const record=currentOdds(),threshold=EV_THRESHOLDS[mode]||1.15;
     if(!record)return{available:false,status:oddsStatus,threshold,picks:[],record:null};
-    const all=makeBets(rows,120,'hit').map(x=>{const odds=oddsFor(record,x.combo),prob=Number(x.share||0),safeProb=prob*SAFETY_FACTOR;return{...x,prob,safeProb,odds,ev:safeProb*odds}}).filter(x=>x.odds>0&&x.prob>=.002);
+    const calibrated=typeof calibratedPredictionRows==='function'?calibratedPredictionRows(rows):rows;
+    let all=[];for(const x of calibrated)for(const y of calibrated)for(const z of calibrated){if(x.k===y.k||x.k===z.k||y.k===z.k)continue;const raw=Math.max(1e-12,Number(x.p?.[0]))*Math.max(1e-12,Number(y.p?.[1]))*Math.max(1e-12,Number(z.p?.[2]));all.push({combo:`${x.k}-${y.k}-${z.k}`,boats:[x.k,y.k,z.k],raw})}
+    const total=all.reduce((s,x)=>s+x.raw,0)||1;all=all.map(x=>{const odds=oddsFor(record,x.combo),prob=x.raw/total,safeProb=prob*SAFETY_FACTOR;return{...x,prob,safeProb,odds,ev:safeProb*odds}}).filter(x=>x.odds>0&&x.prob>=.002);
     const favorite=rows.slice().sort((a,b)=>Number(b.p?.[0]||0)-Number(a.p?.[0]||0))[0]?.k;
     const candidates=mode==='hit'?all.filter(x=>x.boats?.[0]===favorite&&x.ranks?.[1]<=3&&x.ranks?.[2]<=4):all;
     const pool=candidates.sort((a,b)=>b.prob-a.prob).slice(0,POOL_LIMITS[mode]||120);
@@ -44,7 +46,7 @@
     if(!value.available){el.innerHTML=`<div class="odds-wait">${oddsStatus==='loading'?'3連単オッズ取得中…':'3連単オッズ未取得｜期待値判定待機'}</div>`;return}
     const updated=value.record?.fetched_at?new Date(value.record.fetched_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
     if(!value.picks.length){el.innerHTML=`<div class="odds-head">期待値判定 <b>見送り</b><span>オッズ ${updated}更新</span></div><div class="value-empty">基準EV ${value.threshold.toFixed(2)}以上の買い目がありません。</div>`;return}
-    const strong=value.picks.some(x=>x.ev>=1.30),thick=value.picks.some(x=>x.ev>=1.15);el.innerHTML=`<div class="odds-head">期待値買い目 <b>${value.picks.length}点</b><span>オッズ ${updated}更新</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり</div>':thick?'<div class="ev-race-alert">厚張り候補あり</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${value.picks.map(x=>`<tr><td>${x.combo}</td><td>${(x.safeProb*100).toFixed(1)}%</td><td>${x.odds.toFixed(1)}</td><td class="${x.ev>=1.15?'ev-high':''}">${x.ev.toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${stakeForEv(x.ev).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">確率は安全率75%で計算｜EV別推奨額：1.00〜 ¥100 / 1.15〜 ¥200 / 1.30〜 ¥300｜最大4点</div>`
+    const strong=value.picks.some(x=>x.ev>=1.30),thick=value.picks.some(x=>x.ev>=1.15);el.innerHTML=`<div class="odds-head">期待値買い目 <b>${value.picks.length}点</b><span>オッズ ${updated}更新</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり</div>':thick?'<div class="ev-race-alert">厚張り候補あり</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${value.picks.map(x=>`<tr><td>${x.combo}</td><td>${(x.safeProb*100).toFixed(1)}%</td><td>${x.odds.toFixed(1)}</td><td class="${x.ev>=1.15?'ev-high':''}">${x.ev.toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${stakeForEv(x.ev).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">全120通り正規化＋確率校正＋安全率75%｜EV別推奨額：1.00〜 ¥100 / 1.15〜 ¥200 / 1.30〜 ¥300｜最大4点</div>`
   }
 
   function renderBaseBetsPanel(rows){
@@ -66,7 +68,7 @@
     rec.value_modes=rec.value_modes||{};
     for(const mode of ['hit','balance','return']){const v=valueCandidates(rows,mode),picks=v.picks.map(x=>x.combo);const items=v.picks.map(x=>({combo:x.combo,prob:x.safeProb,odds:x.odds,ev:x.ev,stake:stakeForEv(x.ev)})),stake=items.reduce((s,x)=>s+x.stake,0);rec.value_modes[mode]={picks,stake,settled:false,hit:false,payout:0,skipped:!picks.length,threshold:v.threshold,stake_strategy:'ev_tier_v1',items}}
     const oddsAt=currentOdds().fetched_at||new Date().toISOString();
-    rec.odds_snapshot_at=oddsAt;rec.value_mode=valuePredictionMode;rec.value_model_version=3;rec.value_saved_at=new Date().toISOString();
+    rec.odds_snapshot_at=oddsAt;rec.value_mode=valuePredictionMode;rec.value_model_version=4;rec.probability_calibration=typeof v8CalibrationStatus==='function'?v8CalibrationStatus():{active:false};rec.value_saved_at=new Date().toISOString();
     // Keep the saved EV picks tied to the exact odds snapshot used for the on-screen EV calculation.
     // recommendation.js will stamp the matching recommendation with this same odds timestamp.
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
