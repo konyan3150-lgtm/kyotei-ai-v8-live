@@ -36,9 +36,13 @@
   }
   function renderSavedValueBets(saved){
     const el=document.getElementById('bets');if(!el||!saved)return false;
-    const items=Array.isArray(saved.items)?saved.items:[];if(!items.length)return false;
-    const strong=items.some(x=>Number(x.ev)>=1.30),thick=items.some(x=>Number(x.ev)>=1.15);
-    el.innerHTML=`<div class="odds-head">保存済み期待値買い目 <b>${items.length}点</b><span>締切前保存データ</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり（保存時）</div>':thick?'<div class="ev-race-alert">厚張り候補あり（保存時）</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${items.map(x=>`<tr><td>${x.combo}</td><td>${(Number(x.prob||0)*100).toFixed(1)}%</td><td>${Number(x.odds||0).toFixed(1)}</td><td class="${Number(x.ev)>=1.15?'ev-high':''}">${Number(x.ev||0).toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${Number(x.stake||stakeForEv(x.ev)).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">終了済みレース：締切前に保存したオッズ・EVから表示</div>`;return true
+    const items=Array.isArray(saved.items)?saved.items:[],picks=Array.isArray(saved.picks)?saved.picks:[];
+    if(items.length){
+      const strong=items.some(x=>Number(x.ev)>=1.30),thick=items.some(x=>Number(x.ev)>=1.15);
+      el.innerHTML=`<div class="odds-head">保存済み期待値買い目 <b>${items.length}点</b><span>締切前保存データ</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり（保存時）</div>':thick?'<div class="ev-race-alert">厚張り候補あり（保存時）</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${items.map(x=>`<tr><td>${x.combo}</td><td>${(Number(x.prob||0)*100).toFixed(1)}%</td><td>${Number(x.odds||0).toFixed(1)}</td><td class="${Number(x.ev)>=1.15?'ev-high':''}">${Number(x.ev||0).toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${Number(x.stake||stakeForEv(x.ev)).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">終了済みレース：締切前に保存したオッズ・EVから表示</div>`;return true
+    }
+    if(!picks.length)return false;
+    el.innerHTML=`<div class="odds-head">保存済み期待値買い目 <b>${picks.length}点</b><span>締切前保存データ</span></div><table class="bettable value-table"><thead><tr><th>組番</th><th>保存状態</th></tr></thead><tbody>${picks.map(combo=>`<tr><td>${String(combo)}</td><td>締切前保存</td></tr>`).join('')}</tbody></table><div class="value-note">締切前の組番は保存済みです。保存記録にEV・オッズ詳細がないため、ここでは組番のみ表示しています。</div>`;return true
   }
   function renderValueBets(rows){
     const el=document.getElementById('bets');if(!el)return;
