@@ -86,7 +86,7 @@
 
   async function loadLiveOdds(){
     if(typeof dateOffset!=='undefined'&&dateOffset!==0){oddsStatus='unavailable';return}
-    try{const res=await fetch(`odds.json?d=${day()}&x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(String(data?.date)!==String(day())||!data?.races)throw new Error('本日データ待機中');oddsPayload=data;oddsStatus='ok'}catch(e){oddsPayload=null;oddsStatus='unavailable'}
+    try{let data=null,last='';const urls=[`odds.json?d=${day()}&x=${Date.now()}`,`https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/odds.json?d=${day()}&x=${Date.now()}`];for(const url of urls){try{const res=await fetch(url,{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);const candidate=await res.json();if(String(candidate?.date)!==String(day())||!candidate?.races)throw new Error('本日データ待機中');data=candidate;break}catch(e){last=e.message}}if(!data)throw new Error(last||'本日オッズ未取得');oddsPayload=data;oddsStatus='ok'}catch(e){oddsPayload=null;oddsStatus='unavailable'}
     try{if(D&&sid){if(typeof autoSaveAllPredictions==='function')autoSaveAllPredictions();draw()}}catch(e){}
   }
   setTimeout(loadLiveOdds,500);setInterval(loadLiveOdds,180000);
