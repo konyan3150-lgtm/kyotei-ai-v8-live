@@ -43,6 +43,9 @@ jobs:
       - name: Fetch near-cutoff trifecta odds
         run: php scripts/fetch_live_odds.php
       - name: Fetch official race results
+        # Early in the morning the official pay page can legitimately contain no results yet.
+        # Do not let that block fresh odds from being committed for the new day.
+        continue-on-error: true
         run: node scripts/fetch_official_results.mjs
       - name: Save predictions and settle results
         continue-on-error: true
