@@ -11,6 +11,7 @@ on:
       - "scripts/fetch_official_results.mjs"
       - "scripts/fetch_official_previews.mjs"
       - "scripts/build_runtime_payloads.mjs"
+      - "scripts/backfill_expert_history.mjs"
       - "scripts/odds-composer.json"
       - "scripts/update_server_predictions.mjs"
       - ".github/workflows/update-live-odds.yml"
@@ -58,6 +59,8 @@ jobs:
       - name: Save predictions and settle results
         continue-on-error: true
         run: node scripts/update_server_predictions.mjs
+      - name: Backfill historical Expert evaluations
+        run: node scripts/backfill_expert_history.mjs
       - name: Commit updated odds and predictions
         run: |
           if git diff --quiet -- odds.json dev/odds.json dev/official-results.json dev/official-previews.json dev/racer-aptitude-runtime.json.gz dev/course-stats-runtime.json dev/server-predictions.json dev/server-predictions-index.json dev/server-predictions-archive; then
