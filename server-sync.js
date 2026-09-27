@@ -4,9 +4,22 @@
   const diag=()=>document.getElementById('serverDiag');
   let archivesPromise=null;
   function stamp(v){const n=Date.parse(v||'');return Number.isFinite(n)?n:0}
+  function samePicks(a,b){return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((x,i)=>String(x)===String(b[i]))}
+  function keepSavedValueDetails(server,local){
+    if(!server||!local?.value_modes)return server;
+    const merged={...server,value_modes:{...(server.value_modes||{})}};let kept=false;
+    for(const mode of ['hit','balance','return']){
+      const incoming=server.value_modes?.[mode],saved=local.value_modes?.[mode];
+      if(!incoming||!Array.isArray(saved?.items)||!saved.items.length||(Array.isArray(incoming.items)&&incoming.items.length)||!samePicks(incoming.picks,saved.picks))continue;
+      const hitItem=saved.items.find(x=>String(x.combo)===String(incoming.result||server.result||'')),payout=incoming.hit&&hitItem?Number(incoming.payout||0)*(Number(hitItem.stake||100)/100):incoming.payout;
+      merged.value_modes[mode]={...incoming,threshold:saved.threshold,stake_strategy:saved.stake_strategy,items:saved.items,stake:Number(saved.stake||incoming.stake||0),payout};kept=true
+    }
+    if(kept){merged.value_model_version=Math.max(4,Number(server.value_model_version||0),Number(local.value_model_version||0));merged.odds_snapshot_at=server.odds_snapshot_at||local.odds_snapshot_at;merged.value_saved_at=server.value_saved_at||local.value_saved_at}
+    return merged
+  }
   function choose(local,server){
     if(!local)return server;
-    if(server.cancelled||server.settled)return server;
+    if(server.cancelled||server.settled)return keepSavedValueDetails(server,local);
     if(local.cancelled||local.settled)return local;
     return stamp(server.cancelled_at||server.settled_at||server.saved_at)>=stamp(local.cancelled_at||local.settled_at||local.saved_at)?server:local
   }
