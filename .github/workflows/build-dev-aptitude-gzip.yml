@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- racer-aptitude.json.gz; then
+          if git ls-files --error-unmatch racer-aptitude.json.gz >/dev/null 2>&1 && git diff --quiet -- racer-aptitude.json.gz; then
             echo "Compressed asset is current"
             exit 0
           fi
