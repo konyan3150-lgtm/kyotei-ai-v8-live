@@ -19,4 +19,6 @@ function score(r,rows){
 }
 window.v8ExpertAssessment=score;
 window.v8ExpertSummary=function(r,rows){const x=score(r,rows),L={normal:'通常',inside:'イン逃げ',upset:'イン崩れ・穴',exhibition:'展示',water:'水面'};return Object.entries(x.weights).sort((a,b)=>b[1]-a[1]).map(([k,v])=>L[k]+' '+Math.round(v*100)+'%').join(' / ')};
+function renderExpertAccum(data){const s=data?.expert_summary,host=document.getElementById('expertDiag');if(!host||!s)return;let el=document.getElementById('expertAccum');if(!el){el=document.createElement('div');el.id='expertAccum';el.style.cssText='margin-top:10px;color:#8fa6b8;font-size:12px';host.insertAdjacentElement('afterend',el)}const groups=Object.values(s.by_active||{}).filter(x=>Number(x.saved)).sort((a,b)=>Number(b.saved)-Number(a.saved)).slice(0,3).map(x=>x.label+' '+x.saved+'R').join('・');el.textContent='Expert蓄積：'+Number(s.saved||0)+'R（結果 '+Number(s.settled||0)+'R）'+(groups?'｜'+groups:'')}
+window.addEventListener('v8-server-predictions',e=>renderExpertAccum(e.detail));if(window.__v8ServerPredictionData)setTimeout(()=>renderExpertAccum(window.__v8ServerPredictionData),0);
 })();
