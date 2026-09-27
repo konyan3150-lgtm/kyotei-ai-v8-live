@@ -6,13 +6,24 @@
   const dateLabel=v=>String(v||'').replace(/^(\d{4})(\d{2})(\d{2})$/,'$1/$2/$3');
   const dateValue=v=>{const m=String(v||'').match(/^(\d{4})(\d{2})(\d{2})$/);return m?Date.UTC(+m[1],+m[2]-1,+m[3]):0};
 
+  let serverRecords=[];
+  async function loadServerRecords(){
+    try{
+      const res=await fetch('https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/dev/server-predictions.json?x='+Date.now(),{cache:'no-store'});
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      const data=await res.json();
+      serverRecords=Object.values(data?.records||{}).filter(x=>x&&x.source==='server');
+      render();
+    }catch(e){}
+  }
   function records(){
-    const out=[];
+    const map=new Map();
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;
-      try{const x=JSON.parse(localStorage.getItem(key)||'null');if(x?.source==='server')out.push(x)}catch(e){}
+      try{const x=JSON.parse(localStorage.getItem(key)||'null');if(x?.source==='server')map.set(`${x.date}_${x.stadium}_${x.race}`,x)}catch(e){}
     }
-    return out.sort((a,b)=>dateValue(b.date)-dateValue(a.date)||Number(b.race||0)-Number(a.race||0)||Number(b.stadium||0)-Number(a.stadium||0));
+    for(const x of serverRecords){const k=`${x.date}_${x.stadium}_${x.race}`,prev=map.get(k);if(!prev||Date.parse(x.settled_at||x.saved_at||0)>=Date.parse(prev.settled_at||prev.saved_at||0))map.set(k,x)}
+    return [...map.values()].sort((a,b)=>dateValue(b.date)-dateValue(a.date)||Number(b.race||0)-Number(a.race||0)||Number(b.stadium||0)-Number(a.stadium||0));
   }
 
   function modeRecord(rec,mode,view){
@@ -75,4 +86,5 @@
   if(baseRenderStats)renderStats=function(){baseRenderStats();render()};
   window.renderPredictionHistory=render;
   render();
+  loadServerRecords();
 })();
