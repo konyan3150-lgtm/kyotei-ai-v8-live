@@ -1,0 +1,53 @@
+name: Build compressed aptitude asset for DEV
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev-prob-calibration]
+    paths:
+      - racer-aptitude.js
+      - .github/workflows/build-dev-aptitude-gzip.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-dev-aptitude-gzip
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Build and validate gzip asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          gzip -n -9 -c racer-aptitude.json > racer-aptitude.json.gz
+          node - <<'NODE'
+          const fs=require('fs'),zlib=require('zlib');
+          const raw=fs.readFileSync('racer-aptitude.json');
+          const restored=zlib.gunzipSync(fs.readFileSync('racer-aptitude.json.gz'));
+          if(!raw.equals(restored))throw Error('gzip roundtrip mismatch');
+          const data=JSON.parse(restored);
+          if(data.schema!=='kyotei-v8-racer-aptitude'||!data.racers_count)throw Error('invalid aptitude data');
+          console.log({raw:raw.length,gzip:fs.statSync('racer-aptitude.json.gz').size,racers:data.racers_count,starts:data.starts});
+          NODE
+
+      - name: Commit compressed asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- racer-aptitude.json.gz; then
+            echo "Compressed asset is current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add racer-aptitude.json.gz
+          git commit -m "perf(dev): refresh compressed aptitude asset"
+          git push origin HEAD:dev-prob-calibration
