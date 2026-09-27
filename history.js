@@ -41,7 +41,7 @@
       if((rec?.mode||'hit')===mode&&rec?.picks)return {picks:rec.picks,stake:rec.stake,settled:rec.settled,hit:rec.hit,payout:rec.payout,result:rec.result};
       return null
     }
-    if(rec?.value_model_version===3&&rec?.value_modes?.[mode])return rec.value_modes[mode];
+    if(Number(rec?.value_model_version)>=3&&rec?.value_modes?.[mode])return rec.value_modes[mode];
     return null;
   }
 
