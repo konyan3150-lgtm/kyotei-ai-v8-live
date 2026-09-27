@@ -7,14 +7,23 @@
   const dateValue=v=>{const m=String(v||'').match(/^(\d{4})(\d{2})(\d{2})$/);return m?Date.UTC(+m[1],+m[2]-1,+m[3]):0};
 
   let serverRecords=[];
-  async function loadServerRecords(){
+  function acceptServerRecords(data){
+    serverRecords=Object.values(data?.records||{}).filter(x=>x&&x.source==='server');
+    render();
+  }
+  function loadServerRecords(){
+    if(window.__v8ServerPredictionData){acceptServerRecords(window.__v8ServerPredictionData);return}
+    let received=false;
+    window.addEventListener('v8-server-predictions',event=>{received=true;acceptServerRecords(event.detail)},{once:true});
+    setTimeout(async()=>{
+      if(received||window.__v8ServerPredictionData)return;
     try{
       const res=await fetch('https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/dev/server-predictions.json?x='+Date.now(),{cache:'no-store'});
       if(!res.ok)throw new Error('HTTP '+res.status);
       const data=await res.json();
-      serverRecords=Object.values(data?.records||{}).filter(x=>x&&x.source==='server');
-      render();
+      acceptServerRecords(data);
     }catch(e){}
+    },3500);
   }
   function records(){
     const map=new Map();

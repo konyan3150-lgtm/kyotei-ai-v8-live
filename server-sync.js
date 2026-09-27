@@ -1,5 +1,6 @@
 (function(){
   const PREFIX='kyotei_v8_dev_result_';
+  const LIVE_BASE='https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/';
   const diag=()=>document.getElementById('serverDiag');
   let archivesPromise=null;
   function stamp(v){const n=Date.parse(v||'');return Number.isFinite(n)?n:0}
@@ -21,17 +22,18 @@
   async function syncArchives(){
     if(archivesPromise)return archivesPromise;
     archivesPromise=(async()=>{
-      const indexRes=await fetch(`dev/server-predictions-index.json?x=${Date.now()}`,{cache:'no-store'});if(!indexRes.ok){if(indexRes.status===404)return{imported:0,updated:0,total:0};throw Error('archive index HTTP '+indexRes.status)}
+      const indexRes=await fetch(`${LIVE_BASE}dev/server-predictions-index.json?x=${Date.now()}`,{cache:'no-store'});if(!indexRes.ok){if(indexRes.status===404)return{imported:0,updated:0,total:0};throw Error('archive index HTTP '+indexRes.status)}
       const index=await indexRes.json();if(index?.schema!=='kyotei-v8-server-predictions-index'||index?.version!==1)return{imported:0,updated:0,total:0};
-      let imported=0,updated=0;for(const item of index.archives||[]){const version=encodeURIComponent(item.updated_at||item.record_count||'1'),res=await fetch(`dev/${item.file}?v=${version}`);if(!res.ok)continue;const archive=await res.json();if(archive?.schema!=='kyotei-v8-server-predictions-archive'||archive?.version!==1)continue;const merged=importRecords(archive.records);imported+=merged.imported;updated+=merged.updated}
+      let imported=0,updated=0;for(const item of index.archives||[]){const version=encodeURIComponent(item.updated_at||item.record_count||'1'),res=await fetch(`${LIVE_BASE}dev/${item.file}?v=${version}`);if(!res.ok)continue;const archive=await res.json();if(archive?.schema!=='kyotei-v8-server-predictions-archive'||archive?.version!==1)continue;const merged=importRecords(archive.records);imported+=merged.imported;updated+=merged.updated}
       return{imported,updated,total:Number(index.total_record_count||0)}
     })().catch(e=>{archivesPromise=null;throw e});return archivesPromise
   }
   async function syncServerPredictions(){
     const el=diag();try{
       if(el)el.textContent='常時自動保存：同期中…';
-      const res=await fetch(`dev/server-predictions.json?x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);
+      const res=await fetch(`${LIVE_BASE}dev/server-predictions.json?x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);
       const data=await res.json();if(data?.schema!=='kyotei-v8-server-predictions'||data?.version!==1||!data.records)throw Error('データ形式不一致');
+      window.__v8ServerPredictionData=data;window.dispatchEvent(new CustomEvent('v8-server-predictions',{detail:data}));
       const current=importRecords(data.records),archive=await syncArchives();let imported=current.imported+archive.imported,updated=current.updated+archive.updated;
       if((imported||updated)&&typeof draw==='function'&&typeof D!=='undefined'&&D&&typeof sid!=='undefined'&&sid)draw();
       else{if(typeof renderStats==='function')renderStats();if(typeof window.renderPredictionHistory==='function')window.renderPredictionHistory()}
