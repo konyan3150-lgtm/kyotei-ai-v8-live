@@ -19,3 +19,5 @@ html{scroll-behavior:smooth}.nav-anchor{scroll-margin-top:12px}.bottomnav button
 #raceScroll .racechip.race-cancelled{background:#202830!important;border-color:#87939d!important;color:#c3cbd2!important;opacity:.78}.racebadge.cancelled{background:#53616d;color:#fff}.venuechip .vnext.cancelled{color:#aeb8c0}
 #raceScroll .racechip.race-cancelled.active{box-shadow:0 0 0 2px #fff}.lg-frame.result-cancelled{border-color:#87939d;background:#202830}
 .stats-section-title{margin-top:14px;padding-top:11px;border-top:1px solid #214b6d;color:#a9dcff}
+
+.expert-history-row{display:flex;flex-wrap:wrap;gap:4px 12px;padding:9px 0;border-bottom:1px solid #334155;font-size:13px}.expert-history-row b{min-width:9em}.expert-history-row small{color:#b8c7d9}.expert-history-row:last-child{border-bottom:0}

@@ -33,6 +33,7 @@
       const res=await fetch(`server-predictions.json?x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);
       const data=await res.json();if(data?.schema!=='kyotei-v8-server-predictions'||data?.version!==1||!data.records)throw Error('データ形式不一致');
       const current=importRecords(data.records),archive=await syncArchives();let imported=current.imported+archive.imported,updated=current.updated+archive.updated;
+      window.__v8ServerPredictionData=data;window.dispatchEvent(new CustomEvent('v8-server-predictions',{detail:data}));
       if((imported||updated)&&typeof draw==='function'&&typeof D!=='undefined'&&D&&typeof sid!=='undefined'&&sid)draw();
       else{if(typeof renderStats==='function')renderStats();if(typeof window.renderPredictionHistory==='function')window.renderPredictionHistory()}
       const updatedAt=data.updated_at?new Date(data.updated_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';

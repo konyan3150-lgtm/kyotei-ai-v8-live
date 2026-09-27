@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {summarizeExperts} from './expert_summary.mjs';
 import {aptitudeFeatures} from './racer_aptitude_features.mjs';
 
 const ROOT=path.resolve(import.meta.dirname,'..');
@@ -72,7 +73,6 @@ export function compactSettledRecord(rec){
   return Object.fromEntries(Object.entries(out).filter(([,value])=>value!==undefined&&value!==false&&value!==''))
 }
 const recordTime=rec=>{const d=String(rec?.date||'');return /^\d{8}$/.test(d)?Date.parse(`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}T00:00:00+09:00`):NaN};
-function summarizeExperts(allRecords){const labels={normal:'通常',inside:'イン逃げ',upset:'イン崩れ・穴',exhibition:'展示変化',water:'水面'},by_active=Object.fromEntries(Object.entries(labels).map(([key,label])=>[key,{label,saved:0,settled:0,inside_wins:0,reconstructed:0,modes:Object.fromEntries(MODES.map(mode=>[mode,{races:0,hits:0,invest:0,payout:0}])),value_modes:Object.fromEntries(MODES.map(mode=>[mode,{races:0,hits:0,invest:0,payout:0}]))}]));let saved=0,settled=0,reconstructed=0;for(const rec of allRecords){const snap=rec?.expert_snapshot;if(!snap?.active)continue;saved++;if(snap.reconstructed)reconstructed++;const row=by_active[snap.active]||(by_active[snap.active]={label:snap.label||snap.active,saved:0,settled:0,inside_wins:0,reconstructed:0,modes:{},value_modes:{}});row.saved++;if(snap.reconstructed)row.reconstructed++;if(!rec.expert_result)continue;settled++;row.settled++;if(rec.expert_result.inside_won)row.inside_wins++;for(const group of ['modes','value_modes'])for(const mode of MODES){const m=rec.expert_result?.[group]?.[mode];if(!m||!Number(m.stake))continue;const s=row[group][mode]||(row[group][mode]={races:0,hits:0,invest:0,payout:0});s.races++;if(m.hit)s.hits++;s.invest+=Number(m.stake||0);s.payout+=Number(m.payout||0)}}return{version:1,saved,settled,reconstructed,live:saved-reconstructed,by_active}}
 export function normalizeModel(payload){return[1,2,3].map(k=>{const z=payload.ranks?.[String(k)]||payload.ranks?.[k];return{...z,feature_names:payload.features,place_categories:z.place_categories||z.categories,num_medians:z.num_medians||z.medians,cal_x:z.cal_x||z.calx,cal_y:z.cal_y||z.caly}})}
 
 export async function run({now=new Date()}={}){
