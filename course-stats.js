@@ -62,6 +62,7 @@ async function loadCourseStats(){
     if(diag)diag.textContent='コース別成績：公式データ取得中…';
     const cacheDay=typeof day==='function'?day():new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Tokyo'}).replaceAll('-','');
     const sources=[
+      `https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/dev/course-stats-runtime.json?d=${cacheDay}&t=${Date.now()}`,
       `https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/course-stats.json?d=${cacheDay}&t=${Date.now()}`,
       `course-stats.json?v=159&d=${cacheDay}`
     ];
@@ -72,6 +73,7 @@ async function loadCourseStats(){
         if(!res.ok)throw new Error('HTTP '+res.status);
         const candidate=await res.json();
         if(candidate?.schema!=='kyotei-course-stats'||!candidate.racers)throw new Error('データ形式不一致');
+        if(candidate?.runtime?.date&&String(candidate.runtime.date)!==String(cacheDay))throw new Error('当日データではありません');
         data=candidate;
         if(String(candidate.date)===String(cacheDay))break;
       }catch(error){lastError=error}

@@ -1,14 +1,24 @@
 let racerAptitudeData=null,racerAptitudeDay='',racerAptitudeLoadPromise=null;
+async function decodeRacerAptitudeGzip(res){
+  if(!res.ok)throw Error(`gzip HTTP ${res.status}`);
+  const encoded=/gzip/i.test(res.headers.get('content-encoding')||'');
+  if(encoded)return await res.json();
+  if(!res.body||typeof DecompressionStream!=='function')throw Error('gzip展開非対応');
+  return await new Response(res.body.pipeThrough(new DecompressionStream('gzip'))).json();
+}
 async function fetchRacerAptitude(base){
-  const version='156-perf1';
+  const version='160-runtime1',dateKey=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Tokyo'}).replaceAll('-','');
   if(typeof DecompressionStream==='function'){
     try{
+      const runtimeUrl=`https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/dev/racer-aptitude-runtime.json.gz?d=${dateKey}&v=${version}`;
+      const runtime=await decodeRacerAptitudeGzip(await fetch(runtimeUrl,{cache:'no-store'}));
+      if(runtime?.schema!=='kyotei-v8-racer-aptitude')throw Error('runtime形式不一致');
+      if(runtime?.runtime?.date&&String(runtime.runtime.date)!==dateKey)throw Error('runtime日付不一致');
+      return runtime;
+    }catch(e){console.warn('当日用選手適性データ取得失敗。保存版へ切替',e)}
+    try{
       const res=await fetch(`${base}racer-aptitude.json.gz?v=${version}`,{cache:'no-cache'});
-      if(!res.ok)throw Error(`gzip HTTP ${res.status}`);
-      const encoded=/gzip/i.test(res.headers.get('content-encoding')||'');
-      if(encoded)return await res.json();
-      if(!res.body)throw Error('gzip bodyなし');
-      return await new Response(res.body.pipeThrough(new DecompressionStream('gzip'))).json();
+      return await decodeRacerAptitudeGzip(res);
     }catch(e){console.warn('圧縮選手適性データ取得失敗。通常版へ切替',e)}
   }
   const res=await fetch(`${base}racer-aptitude.json?v=${version}`,{cache:'no-cache'});
