@@ -32,7 +32,9 @@
   function cancelledRace(r){return typeof isRaceCancelled==='function'&&isRaceCancelled(r,D?.programs?.stadiums?.[sid]?.races)}
 
   function savedValueMode(){
-    try{const rec=JSON.parse(localStorage.getItem(resultStoreKey())||'null');return rec?.value_modes?.[valuePredictionMode]||null}catch(e){return null}
+    const key=resultStoreKey(),server=window.v8GetServerPrediction?.(key);
+    if(server?.settled||server?.cancelled)return server.value_modes?.[valuePredictionMode]||null;
+    try{const rec=JSON.parse(localStorage.getItem(key)||'null');return rec?.value_modes?.[valuePredictionMode]||server?.value_modes?.[valuePredictionMode]||null}catch(e){return server?.value_modes?.[valuePredictionMode]||null}
   }
   function renderSavedValueBets(saved){
     const el=document.getElementById('bets');if(!el||!saved)return false;

@@ -2,7 +2,7 @@
   const PREFIX='kyotei_v8_dev_result_';
   const LIVE_BASE='https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/';
   const diag=()=>document.getElementById('serverDiag');
-  let archivesPromise=null;
+  let archivesPromise=null,currentData=null;
   function stamp(v){const n=Date.parse(v||'');return Number.isFinite(n)?n:0}
   function samePicks(a,b){return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((x,i)=>String(x)===String(b[i]))}
   function keepSavedValueDetails(server,local){
@@ -23,12 +23,17 @@
     if(local.cancelled||local.settled)return local;
     return stamp(server.cancelled_at||server.settled_at||server.saved_at)>=stamp(local.cancelled_at||local.settled_at||local.saved_at)?server:local
   }
+  window.v8GetServerPrediction=key=>{
+    const server=currentData?.records?.[key];if(!server)return null;
+    let local=null;try{local=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
+    return choose(local,server)
+  };
   function importRecords(records){
     let imported=0,updated=0;
     for(const[key,record]of Object.entries(records||{})){
       if(!key.startsWith(PREFIX)||!record||typeof record!=='object')continue;
       let local=null;try{local=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
-      const selected=choose(local,record);if(selected!==local){localStorage.setItem(key,JSON.stringify(selected));local?updated++:imported++}
+      const selected=choose(local,record);if(selected!==local){try{localStorage.setItem(key,JSON.stringify(selected));local?updated++:imported++}catch(e){/* In-memory server data remains available when storage is full. */}}
     }
     return{imported,updated}
   }
@@ -46,12 +51,18 @@
       if(el)el.textContent='常時自動保存：同期中…';
       const res=await fetch(`${LIVE_BASE}dev/server-predictions.json?x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);
       const data=await res.json();if(data?.schema!=='kyotei-v8-server-predictions'||data?.version!==1||!data.records)throw Error('データ形式不一致');
-      window.__v8ServerPredictionData=data;window.dispatchEvent(new CustomEvent('v8-server-predictions',{detail:data}));
-      const current=importRecords(data.records),archive=await syncArchives();let imported=current.imported+archive.imported,updated=current.updated+archive.updated;
-      if((imported||updated)&&typeof draw==='function'&&typeof D!=='undefined'&&D&&typeof sid!=='undefined'&&sid)draw();
-      else{if(typeof renderStats==='function')renderStats();if(typeof window.renderPredictionHistory==='function')window.renderPredictionHistory()}
+      currentData=data;window.__v8ServerPredictionData=data;
+      const current=importRecords(data.records);
+      if(typeof invalidateStatsCache==='function')invalidateStatsCache();
+      if(typeof draw==='function'&&typeof D!=='undefined'&&D&&typeof sid!=='undefined'&&sid)draw();
+      else if(typeof renderStats==='function')renderStats();
+      window.dispatchEvent(new CustomEvent('v8-server-predictions',{detail:data}));
+      let archive={imported:0,updated:0,total:0},archiveError='';
+      try{archive=await syncArchives()}catch(e){archiveError=e.message}
+      const imported=current.imported+archive.imported,updated=current.updated+archive.updated;
+      if(archive.imported||archive.updated){if(typeof invalidateStatsCache==='function')invalidateStatsCache();if(typeof renderStats==='function')renderStats();if(typeof window.renderPredictionHistory==='function')window.renderPredictionHistory()}
       const updatedAt=data.updated_at?new Date(data.updated_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
-      const total=Number(data.total_record_count||archive.total||data.record_count||0);if(el)el.textContent=`✓ 常時自動保存 接続｜${total}R｜${updatedAt}更新${imported||updated?`｜端末へ${imported+updated}件反映`:''}`;
+      const total=Number(data.total_record_count||archive.total||data.record_count||0);if(el)el.textContent=`✓ 常時自動保存 接続｜${total}R｜${updatedAt}更新${imported||updated?`｜端末へ${imported+updated}件反映`:''}${archiveError?'｜過去履歴は同期待ち':''}`;
       return{imported,updated}
     }catch(e){if(el)el.textContent='常時自動保存：接続待ち｜'+e.message;return null}
   }

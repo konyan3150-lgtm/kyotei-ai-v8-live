@@ -102,7 +102,32 @@ function renderBaseStats(records){
   }
   el.innerHTML=cards;const recommendedEl=document.getElementById('baseRecommendedModeStats');if(recommendedEl)recommendedEl.innerHTML=recommendedCards;const auditEl=document.getElementById('baseSavedAudit');if(auditEl)auditEl.innerHTML=audit
 }
-let statsCache=null,statsCacheAt=0;function invalidateStatsCache(){statsCache=null;statsCacheAt=0}function renderStats(){let total,records;if(statsCache&&Date.now()-statsCacheAt<30000){({total,records}=statsCache)}else{total={races:0,hits:0,invest:0,payout:0};records=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith('kyotei_v8_dev_result_'))continue;let x;try{x=JSON.parse(localStorage.getItem(k)||'null')}catch(e){continue}if(x)records.push(x);if(x?.source!=='server'||Number(x?.value_model_version)<3)continue;const primary=x?.value_modes?.[x?.value_mode||x?.mode||'hit'];if(!primary?.settled||primary?.skipped||!Number(primary?.stake))continue;total.races++;if(primary.hit)total.hits++;total.invest+=Number(primary.stake||0);total.payout+=Number(primary.payout||0)}statsCache={total,records};statsCacheAt=Date.now()}fillStatsBox('valueStats',total);renderModeStats(records);renderBaseStats(records)}
+let statsCache=null,statsCacheAt=0;
+function invalidateStatsCache(){statsCache=null;statsCacheAt=0}
+function renderStats(){
+  let total,records;
+  if(statsCache&&Date.now()-statsCacheAt<30000){({total,records}=statsCache)}else{
+    total={races:0,hits:0,invest:0,payout:0};
+    const byKey=new Map();
+    try{for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);if(!key?.startsWith('kyotei_v8_dev_result_'))continue;
+      try{const rec=JSON.parse(localStorage.getItem(key)||'null');if(rec)byKey.set(key,rec)}catch(e){}
+    }}catch(e){}
+    for(const [key,rec] of Object.entries(window.__v8ServerPredictionData?.records||{})){
+      if(key.startsWith('kyotei_v8_dev_result_'))byKey.set(key,window.v8GetServerPrediction?.(key)||rec);
+    }
+    records=[...byKey.values()];
+    for(const x of records){
+      if(x?.source!=='server'||Number(x?.value_model_version)<3)continue;
+      const primary=x?.value_modes?.[x?.value_mode||x?.mode||'hit'];
+      if(!primary?.settled||primary?.skipped||!Number(primary?.stake))continue;
+      total.races++;if(primary.hit)total.hits++;
+      total.invest+=Number(primary.stake||0);total.payout+=Number(primary.payout||0);
+    }
+    statsCache={total,records};statsCacheAt=Date.now();
+  }
+  fillStatsBox('valueStats',total);renderModeStats(records);renderBaseStats(records)
+}
 function transferRecords(){const records={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key||!key.startsWith('kyotei_v8_dev_result_'))continue;const value=localStorage.getItem(key);if(value!=null)records[key]=value}return records}
 function setTransferStatus(message,type=''){const el=document.getElementById('transferStatus');if(!el)return;el.textContent=message;el.className='transferStatus'+(type?' '+type:'')}
 function exportTransferData(){try{const records=transferRecords(),payload={schema:'kyotei-v8-results',version:1,exportedAt:new Date().toISOString(),recordCount:Object.keys(records).length,records},blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a'),d=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Tokyo'});a.href=url;a.download=`kyotei-v8-results-${d}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);setTransferStatus(`${payload.recordCount}件の実績データを書き出しました。`,'ok')}catch(e){setTransferStatus('書き出しに失敗しました：'+e.message,'err')}}
