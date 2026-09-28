@@ -63,8 +63,14 @@
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
   }
 
-  function storedAssessments(){let rec;try{rec=JSON.parse(localStorage.getItem(resultStoreKey())||'null')}catch(e){}return rec?.recommendations||null}
-  function storedBaseAssessments(){let rec;try{rec=JSON.parse(localStorage.getItem(resultStoreKey())||'null')}catch(e){}return rec?.base_recommendations||null}
+  function savedDecision(){
+    const key=resultStoreKey(),server=window.v8GetServerPrediction?.(key);
+    if(server?.settled||server?.cancelled)return server;
+    let local=null;try{local=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
+    return local||server||null
+  }
+  function storedAssessments(){return savedDecision()?.recommendations||null}
+  function storedBaseAssessments(){return savedDecision()?.base_recommendations||null}
   function recommendedStats(mode,isBase=false){
     let races=0,hits=0,invest=0,payout=0;
     for(let i=0;i<localStorage.length;i++){
@@ -90,18 +96,13 @@
   }
   function boxHtml(title,recs,currentMode,stats){
     let current=recs[currentMode]||recs.hit;
-    // Legacy/synced records can contain a valid purchase level but a missing/zero score.
-    // Never render that contradictory state as "購入推奨 0/100"; rebuild a display score
-    // from the assessment inputs while preserving the recorded purchase level.
-    if(current&&current.level!=='none'&&Number(current.score||0)<=0){
-      const top=Number(current.top||0),gap=Number(current.gap||0),coverage=Number(current.coverage||0),hole=Number(current.hole||0);
-      let rebuilt=currentMode==='hit'?top*58+gap*85+coverage*.32:currentMode==='balance'?top*52+gap*72+coverage*.36:hole*80+top*34+coverage*.45;
-      if(!Number.isFinite(rebuilt)||rebuilt<=0)rebuilt=current.level==='buy'?70:current.level==='caution'?50:1;
-      current={...current,score:Math.max(1,Math.min(100,Math.round(rebuilt)))};
-    }
+    const score=Number(current?.score),hasScore=current?.level!=='none'&&current?.score!=null&&Number.isFinite(score)&&score>0;
+    const reasons=current?.reasons?.length?current.reasons:
+      current?.level==='none'?['締切前の判定記録がありません']:
+      ['締切前の購入判断は保存済みです。判定指数の詳細は保存されていません'];
     const chips=MODES.map(m=>`<div class="recommend-chip ${m===currentMode?'active':''} ${recs[m]?.level||'none'}"><span>${LABELS[m]}</span><b>${LEVELS[recs[m]?.level]||'判定なし'}</b></div>`).join('');
     const statText=stats.races?`購入推奨のみ：${stats.races}R・的中率 ${stats.hitRate.toFixed(1)}%・回収率 ${stats.roi.toFixed(1)}%`:'購入推奨の確定実績は、これから蓄積されます';
-    return `<div class="recommend-title"><span>${title}</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${Number(current.score||0)}</b>/100</div><ul>${(current.reasons||[]).map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
+    return `<div class="recommend-title"><span>${title}</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${hasScore?Math.round(score):'--'}</b>${hasScore?'/100':''}</div><ul>${reasons.map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
   }
   function renderRecommendation(r,rows){
     const box=ensureBox();if(!box)return;
