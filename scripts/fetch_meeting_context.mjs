@@ -88,7 +88,9 @@ export async function collect({date=jstDay(),outputRoot=ROOT,sample=null}={}){
   const errors=[],targets=[];
   if(sample)targets.push(sample);
   else{
-    const program=JSON.parse(await get(`https://boatraceopenapi.github.io/api/v1/${date.slice(0,4)}/${date}.json`));
+    let program;
+    try{program=JSON.parse(await get(`https://boatraceopenapi.github.io/api/v1/${date.slice(0,4)}/${date}.json`))}
+    catch(e){if(e.message==='HTTP 404'){console.log(`Program not published for ${date}; retain saved files and retry next scheduled run`);return null}throw e}
     const venues=program?.programs?.stadiums;if(!venues)throw Error('Program unavailable');
     for(const [stadium,v] of Object.entries(venues)){
       const races=Object.entries(v.races||{}).filter(([,r])=>Number.isFinite(closeMs(r.closed_at))).sort((a,b)=>Number(a[0])-Number(b[0]));
