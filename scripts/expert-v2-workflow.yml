@@ -24,14 +24,17 @@ jobs:
         run: |
           curl -L --fail -o /tmp/expert-classifier-v2.js "https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/dev-prob-calibration/expert-classifier-v2.js"
           curl -L --fail -o /tmp/collect_expert_v2.mjs "https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/dev-prob-calibration/scripts/collect_expert_v2.mjs"
+          curl -L --fail -o /tmp/evaluate_expert_v2.mjs "https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/dev-prob-calibration/scripts/evaluate_expert_v2.mjs"
       - name: Preserve pre-close v2 decisions and attach results
         env:
           EXPERT_CLASSIFIER_PATH: /tmp/expert-classifier-v2.js
           EXPERT_OUTPUT_ROOT: ${{ github.workspace }}
         run: node /tmp/collect_expert_v2.mjs
+      - name: Evaluate v2 separately by class, date and venue
+        run: node /tmp/evaluate_expert_v2.mjs dev/expert-v2-archive > dev/expert-v2-evaluation.json
       - name: Commit development evaluations
         run: |
-          git add dev/expert-v2.json dev/expert-v2-archive/
+          git add dev/expert-v2.json dev/expert-v2-archive/ dev/expert-v2-evaluation.json
           if git diff --cached --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
