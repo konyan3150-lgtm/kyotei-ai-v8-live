@@ -73,8 +73,8 @@
   function storedBaseAssessments(){return savedDecision()?.base_recommendations||null}
   function recommendedStats(mode,isBase=false){
     let races=0,hits=0,invest=0,payout=0;
-    for(let i=0;i<localStorage.length;i++){
-      const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){continue}
+    const records=window.v8GetSavedPredictions?.()||(()=>{const out={};try{for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key?.startsWith(PREFIX))try{out[key]=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}}}catch(e){}return out})();
+    for(const rec of Object.values(records)){
       if(rec?.source!=='server')continue;
       const recommendation=isBase?rec?.base_recommendations?.[mode]:rec?.recommendations?.[mode];
       if(recommendation?.level!=='buy')continue;

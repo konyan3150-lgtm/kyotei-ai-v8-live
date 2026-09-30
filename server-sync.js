@@ -3,6 +3,8 @@
   const LIVE_BASE='https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/';
   const diag=()=>document.getElementById('serverDiag');
   let archivesPromise=null,currentData=null;
+  const archiveRecords={},archiveVersions={};
+  let serverRecords={};
   function stamp(v){const n=Date.parse(v||'');return Number.isFinite(n)?n:0}
   function samePicks(a,b){return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((x,i)=>String(x)===String(b[i]))}
   function keepSavedValueDetails(server,local){
@@ -24,10 +26,25 @@
     return stamp(server.cancelled_at||server.settled_at||server.saved_at)>=stamp(local.cancelled_at||local.settled_at||local.saved_at)?server:local
   }
   window.v8GetServerPrediction=key=>{
-    const server=currentData?.records?.[key];if(!server)return null;
+    const server=serverRecords[key];if(!server)return null;
     let local=null;try{local=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
     return choose(local,server)
   };
+  window.v8GetSavedPredictions=()=>{
+    const records={};
+    try{for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;try{const r=JSON.parse(localStorage.getItem(key)||'null');if(r)records[key]=r}catch(e){}}}catch(e){}
+    for(const [key,server]of Object.entries(serverRecords))records[key]=server.settled||server.cancelled?server:choose(records[key],server);
+    return records;
+  };
+  function publish(){
+    serverRecords=Object.assign({},...Object.values(archiveRecords),currentData?.records||{});
+    const data={...currentData,records:serverRecords};window.__v8ServerPredictionData=data;
+    if(typeof invalidateStatsCache==='function')invalidateStatsCache();
+    if(typeof draw==='function'&&typeof D!=='undefined'&&D&&typeof sid!=='undefined'&&sid)draw();
+    else if(typeof renderStats==='function')renderStats();
+    if(typeof window.renderPredictionHistory==='function')window.renderPredictionHistory();
+    window.dispatchEvent(new CustomEvent('v8-server-predictions',{detail:data}));
+  }
   function importRecords(records){
     let imported=0,updated=0;
     for(const[key,record]of Object.entries(records||{})){
@@ -42,25 +59,27 @@
     archivesPromise=(async()=>{
       const indexRes=await fetch(`${LIVE_BASE}dev/server-predictions-index.json?x=${Date.now()}`,{cache:'no-store'});if(!indexRes.ok){if(indexRes.status===404)return{imported:0,updated:0,total:0};throw Error('archive index HTTP '+indexRes.status)}
       const index=await indexRes.json();if(index?.schema!=='kyotei-v8-server-predictions-index'||index?.version!==1)return{imported:0,updated:0,total:0};
-      let imported=0,updated=0;for(const item of index.archives||[]){const version=encodeURIComponent(item.updated_at||item.record_count||'1'),res=await fetch(`${LIVE_BASE}dev/${item.file}?v=${version}`);if(!res.ok)continue;const archive=await res.json();if(archive?.schema!=='kyotei-v8-server-predictions-archive'||archive?.version!==1)continue;const merged=importRecords(archive.records);imported+=merged.imported;updated+=merged.updated}
+      let imported=0,updated=0;for(const item of index.archives||[]){
+        const version=String(item.updated_at||item.record_count||'1');if(archiveVersions[item.file]===version)continue;
+        const res=await fetch(`${LIVE_BASE}dev/${item.file}?v=${encodeURIComponent(version)}`);if(!res.ok)throw Error('archive HTTP '+res.status);
+        const archive=await res.json();if(archive?.schema!=='kyotei-v8-server-predictions-archive'||archive?.version!==1||!archive.records)throw Error('archive format mismatch');
+        archiveRecords[item.file]=archive.records;archiveVersions[item.file]=version;
+        const merged=importRecords(archive.records);imported+=merged.imported;updated+=merged.updated;
+      }
       return{imported,updated,total:Number(index.total_record_count||0)}
-    })().catch(e=>{archivesPromise=null;throw e});return archivesPromise
+    })().finally(()=>{archivesPromise=null});return archivesPromise
   }
   async function syncServerPredictions(){
     const el=diag();try{
       if(el)el.textContent='常時自動保存：同期中…';
       const res=await fetch(`${LIVE_BASE}dev/server-predictions.json?x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);
       const data=await res.json();if(data?.schema!=='kyotei-v8-server-predictions'||data?.version!==1||!data.records)throw Error('データ形式不一致');
-      currentData=data;window.__v8ServerPredictionData=data;
+      currentData=data;
       const current=importRecords(data.records);
-      if(typeof invalidateStatsCache==='function')invalidateStatsCache();
-      if(typeof draw==='function'&&typeof D!=='undefined'&&D&&typeof sid!=='undefined'&&sid)draw();
-      else if(typeof renderStats==='function')renderStats();
-      window.dispatchEvent(new CustomEvent('v8-server-predictions',{detail:data}));
       let archive={imported:0,updated:0,total:0},archiveError='';
       try{archive=await syncArchives()}catch(e){archiveError=e.message}
+      publish();
       const imported=current.imported+archive.imported,updated=current.updated+archive.updated;
-      if(archive.imported||archive.updated){if(typeof invalidateStatsCache==='function')invalidateStatsCache();if(typeof renderStats==='function')renderStats();if(typeof window.renderPredictionHistory==='function')window.renderPredictionHistory()}
       const updatedAt=data.updated_at?new Date(data.updated_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
       const total=Number(data.total_record_count||archive.total||data.record_count||0);if(el)el.textContent=`✓ 常時自動保存 接続｜${total}R｜${updatedAt}更新${imported||updated?`｜端末へ${imported+updated}件反映`:''}${archiveError?'｜過去履歴は同期待ち':''}`;
       return{imported,updated}

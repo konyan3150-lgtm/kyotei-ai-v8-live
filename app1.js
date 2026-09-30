@@ -113,8 +113,9 @@ function renderStats(){
       const key=localStorage.key(i);if(!key?.startsWith('kyotei_v8_dev_result_'))continue;
       try{const rec=JSON.parse(localStorage.getItem(key)||'null');if(rec)byKey.set(key,rec)}catch(e){}
     }}catch(e){}
-    for(const [key,rec] of Object.entries(window.__v8ServerPredictionData?.records||{})){
-      if(key.startsWith('kyotei_v8_dev_result_'))byKey.set(key,window.v8GetServerPrediction?.(key)||rec);
+    const synced=window.v8GetSavedPredictions?.()||window.__v8ServerPredictionData?.records||{};
+    for(const [key,rec] of Object.entries(synced)){
+      if(key.startsWith('kyotei_v8_dev_result_'))byKey.set(key,rec);
     }
     records=[...byKey.values()];
     for(const x of records){

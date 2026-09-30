@@ -31,7 +31,8 @@
       const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;
       try{const x=JSON.parse(localStorage.getItem(key)||'null');if(x?.source==='server')map.set(`${x.date}_${x.stadium}_${x.race}`,x)}catch(e){}
     }
-    for(const x of serverRecords){const k=`${x.date}_${x.stadium}_${x.race}`,prev=map.get(k);if(!prev||Date.parse(x.settled_at||x.saved_at||0)>=Date.parse(prev.settled_at||prev.saved_at||0))map.set(k,x)}
+    const latest=window.__v8ServerPredictionData?Object.values(window.v8GetSavedPredictions?.()||window.__v8ServerPredictionData.records||{}):serverRecords;
+    for(const x of latest){const k=`${x.date}_${x.stadium}_${x.race}`,prev=map.get(k);if(!prev||Date.parse(x.settled_at||x.saved_at||0)>=Date.parse(prev.settled_at||prev.saved_at||0))map.set(k,x)}
     return [...map.values()].sort((a,b)=>dateValue(b.date)-dateValue(a.date)||Number(b.race||0)-Number(a.race||0)||Number(b.stadium||0)-Number(a.stadium||0));
   }
 
