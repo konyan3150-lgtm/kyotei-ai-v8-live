@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {parseSeries,parsePointChart,combineContext,saveObservation} from './fetch_meeting_context.mjs';
+const td=x=>`<td>${x}</td>`;
+const row=a=>`<tr>${a.map(td).join('')}</tr>`;
+const results=[`<a href="/raceresult?rno=1&amp;hd=20261001">２</a>`,`<a href="/raceresult?rno=10&amp;hd=20261001">１</a>`];
+const profile='<a href="/profile?toban=4166">吉田</a>';
+const html='<h2>試験競走</h2><h3>予選 1800m</h3><tbody>'+row(['<span class="is-boatColor4">４</span>','',profile,'F0 L0 0.15',0,0,0,0,'',1,10,...Array(12).fill('')])+row([4,4,...Array(12).fill('')])+row(['.12','.11',...Array(12).fill('')])+row([...results,...Array(12).fill('')])+'</tbody>';
+const series=parseSeries(html,'20261001',10);
+assert.equal(series.racers[4].series_results.length,1); // never includes the target race result
+assert.equal(series.racers[4].average_st,.12);
+assert.equal(series.racers[4].average_finish,2);
+const chart='<tbody>'+row(['<span class="is-boatColor4">４</span>','',profile,'5.25',23,'6.2','5.8','5.4','5.0','4.6','4.4',11,'3R'])+'</tbody><p>9R終了時点</p>';
+const points=parsePointChart(chart);assert.equal(points.racers[4].required_points,11);
+assert.equal(points.as_of,'9R終了時点');assert.equal(parsePointChart('データはありません').provided,false);
+const options={date:'20261001',stadium:16,race:10,closed_at:'2026-10-01 15:43:00',observed_at:'2026-10-01T06:42:00Z'};
+const rec=combineContext(series,points,options),store={};assert.ok(saveObservation(store,'key',rec));
+assert.equal(store.snapshots.key.captured_before_close,true);
+const late={...rec,observed_at:'2026-10-01T06:43:00Z',racers:{4:{...rec.racers[4],point_rate:99}}};
+saveObservation(store,'key',late);assert.equal(store.snapshots.key.racers[4].point_rate,5.25);
+assert.equal(store.latest.key.racers[4].point_rate,99);
+const mismatch=combineContext(series,{...points,racers:{4:{registration_number:'9999',required_points:1}}},options);
+assert.equal(mismatch.racers[4].required_points,undefined);
+assert.equal(rec.used_in_prediction,false);
+console.log('Meeting parsing, missing data, identity and pre-close freeze tests OK');
