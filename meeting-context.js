@@ -5,7 +5,7 @@
   const fmt=(x,d=2)=>x==null||!Number.isFinite(Number(x))?'--':Number(x).toFixed(d);
   function host(){
     let el=document.getElementById('meetingContext');if(el)return el;
-    const anchor=document.getElementById('expertDiag')?.closest('.panel');if(!anchor)return null;
+    const anchor=document.getElementById('v8summary')?.closest('.panel');if(!anchor)return null;
     const panel=document.createElement('section');panel.className='panel';
     panel.innerHTML='<div class="title">今節成績・勝負がけ（検証用）</div><div id="meetingContext"></div><div class="foot">予想への加点は未実施。必要得点は公式目安で、ボーダーは変動します。</div>';
     anchor.before(panel);return document.getElementById('meetingContext');
