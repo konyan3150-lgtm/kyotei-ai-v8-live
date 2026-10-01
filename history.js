@@ -11,20 +11,6 @@
     serverRecords=Object.values(data?.records||{}).filter(x=>x&&x.source==='server');
     render();
   }
-  function loadServerRecords(){
-    if(window.__v8ServerPredictionData){acceptServerRecords(window.__v8ServerPredictionData);return}
-    let received=false;
-    window.addEventListener('v8-server-predictions',event=>{received=true;acceptServerRecords(event.detail)},{once:true});
-    setTimeout(async()=>{
-      if(received||window.__v8ServerPredictionData)return;
-    try{
-      const res=await fetch('https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/dev/server-predictions.json?x='+Date.now(),{cache:'no-store'});
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      const data=await res.json();
-      acceptServerRecords(data);
-    }catch(e){}
-    },3500);
-  }
   function records(){
     const map=new Map();
     for(let i=0;i<localStorage.length;i++){
@@ -63,6 +49,11 @@
   function render(){
     ensurePanel();
     const panel=document.getElementById('historyPanel');if(!panel)return;
+    if(window.__v8HistoryStatus&&window.__v8HistoryStatus!=='ready'){
+      document.getElementById('historySummary').textContent=window.__v8HistoryStatus==='loading'?'全期間の履歴を読み込み中…':'過去履歴は、この欄を開いた時に取得します。';
+      document.getElementById('historyList').innerHTML=window.__v8HistoryStatus==='loading'?'':'<button type="button" data-load-history>履歴を読み込む</button>';
+      return;
+    }
     const view=document.querySelector('.prediction-type-tabs button.active')?.dataset.view==='base'?'base':'value';
     const title=document.getElementById('historyTitle');if(title)title.textContent=(view==='base'?'V8':'期待値')+' レース履歴・絞り込み成績';
     const scopeLabel=document.getElementById('historyScopeLabel');if(scopeLabel)scopeLabel.hidden=view!=='base';
@@ -96,5 +87,5 @@
   if(baseRenderStats)renderStats=function(){baseRenderStats();render()};
   window.renderPredictionHistory=render;
   render();
-  loadServerRecords();
+  // Server sync supplies recent data immediately; archives are requested on demand.
 })();

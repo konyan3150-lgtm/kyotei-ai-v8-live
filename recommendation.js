@@ -72,6 +72,7 @@
   function storedAssessments(){return savedDecision()?.recommendations||null}
   function storedBaseAssessments(){return savedDecision()?.base_recommendations||null}
   function recommendedStats(mode,isBase=false){
+    if(window.__v8HistoryStatus&&window.__v8HistoryStatus!=='ready')return null;
     let races=0,hits=0,invest=0,payout=0;
     const records=window.v8GetSavedPredictions?.()||(()=>{const out={};try{for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key?.startsWith(PREFIX))try{out[key]=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}}}catch(e){}return out})();
     for(const rec of Object.values(records)){
@@ -101,7 +102,7 @@
       current?.level==='none'?['締切前の判定記録がありません']:
       ['締切前の購入判断は保存済みです。判定指数の詳細は保存されていません'];
     const chips=MODES.map(m=>`<div class="recommend-chip ${m===currentMode?'active':''} ${recs[m]?.level||'none'}"><span>${LABELS[m]}</span><b>${LEVELS[recs[m]?.level]||'判定なし'}</b></div>`).join('');
-    const statText=stats.races?`購入推奨のみ：${stats.races}R・的中率 ${stats.hitRate.toFixed(1)}%・回収率 ${stats.roi.toFixed(1)}%`:'購入推奨の確定実績は、これから蓄積されます';
+    const statText=!stats?'全期間の推奨成績は、結果・成績欄を開くと取得します。':stats.races?`購入推奨のみ：${stats.races}R・的中率 ${stats.hitRate.toFixed(1)}%・回収率 ${stats.roi.toFixed(1)}%`:'購入推奨の確定実績は、これから蓄積されます';
     return `<div class="recommend-title"><span>${title}</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${hasScore?Math.round(score):'--'}</b>${hasScore?'/100':''}</div><ul>${reasons.map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
   }
   function renderRecommendation(r,rows){

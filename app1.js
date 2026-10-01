@@ -105,6 +105,14 @@ function renderBaseStats(records){
 let statsCache=null,statsCacheAt=0;
 function invalidateStatsCache(){statsCache=null;statsCacheAt=0}
 function renderStats(){
+  if(window.__v8HistoryStatus&&window.__v8HistoryStatus!=='ready'){
+    const recent=Object.values(window.__v8ServerPredictionData?.records||{});
+    renderModeStats(recent);renderBaseStats(recent);
+    const message=window.__v8HistoryStatus==='loading'?'全期間の成績を読み込み中…':window.__v8HistoryStatus==='error'?'過去履歴の取得待ちです。':'成績を見る時に過去履歴を取得します。';
+    for(const id of ['valueStats','baseStats','baseRecommendedStats'])document.querySelectorAll(`#${id} .stat b`).forEach(el=>{el.textContent='--'});
+    for(const id of ['modeStats','baseModeStats','baseRecommendedModeStats']){const el=document.getElementById(id);if(el)el.innerHTML=`<div class="foot">${message}</div>`+(window.__v8HistoryStatus==='loading'?'':'<button type="button" data-load-history>全期間の成績を読み込む</button>')}
+    return;
+  }
   let total,records;
   if(statsCache&&Date.now()-statsCacheAt<30000){({total,records}=statsCache)}else{
     total={races:0,hits:0,invest:0,payout:0};

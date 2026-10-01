@@ -3,6 +3,8 @@
   const LIVE_BASE='https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/';
   const diag=()=>document.getElementById('serverDiag');
   let archivesPromise=null,currentData=null;
+  let historyRequested=false,hotPromise=null,historyPromise=null;
+  window.__v8HistoryStatus='idle';
   const archiveRecords={},archiveVersions={};
   let serverRecords={};
   function stamp(v){const n=Date.parse(v||'');return Number.isFinite(n)?n:0}
@@ -57,8 +59,8 @@
   async function syncArchives(){
     if(archivesPromise)return archivesPromise;
     archivesPromise=(async()=>{
-      const indexRes=await fetch(`${LIVE_BASE}dev/server-predictions-index.json?x=${Date.now()}`,{cache:'no-store'});if(!indexRes.ok){if(indexRes.status===404)return{imported:0,updated:0,total:0};throw Error('archive index HTTP '+indexRes.status)}
-      const index=await indexRes.json();if(index?.schema!=='kyotei-v8-server-predictions-index'||index?.version!==1)return{imported:0,updated:0,total:0};
+      const indexRes=await fetch(`${LIVE_BASE}dev/server-predictions-index.json?x=${Date.now()}`,{cache:'no-store'});if(!indexRes.ok)throw Error('archive index HTTP '+indexRes.status);
+      const index=await indexRes.json();if(index?.schema!=='kyotei-v8-server-predictions-index'||index?.version!==1)throw Error('archive index format mismatch');
       let imported=0,updated=0;for(const item of index.archives||[]){
         const version=String(item.updated_at||item.record_count||'1');if(archiveVersions[item.file]===version)continue;
         const res=await fetch(`${LIVE_BASE}dev/${item.file}?v=${encodeURIComponent(version)}`);if(!res.ok)throw Error('archive HTTP '+res.status);
@@ -69,7 +71,7 @@
       return{imported,updated,total:Number(index.total_record_count||0)}
     })().finally(()=>{archivesPromise=null});return archivesPromise
   }
-  async function syncServerPredictions(){
+  async function syncHot(){
     const el=diag();try{
       if(el)el.textContent='常時自動保存：同期中…';
       const res=await fetch(`${LIVE_BASE}dev/server-predictions.json?x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);
@@ -77,14 +79,36 @@
       currentData=data;
       const current=importRecords(data.records);
       let archive={imported:0,updated:0,total:0},archiveError='';
-      try{archive=await syncArchives()}catch(e){archiveError=e.message}
+      if(historyRequested){try{archive=await syncArchives();window.__v8HistoryStatus='ready'}catch(e){archiveError=e.message;window.__v8HistoryStatus='error'}}
       publish();
       const imported=current.imported+archive.imported,updated=current.updated+archive.updated;
       const updatedAt=data.updated_at?new Date(data.updated_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
-      const total=Number(data.total_record_count||archive.total||data.record_count||0);if(el)el.textContent=`✓ 常時自動保存 接続｜${total}R｜${updatedAt}更新${imported||updated?`｜端末へ${imported+updated}件反映`:''}${archiveError?'｜過去履歴は同期待ち':''}`;
+      const total=Number(data.total_record_count||archive.total||data.record_count||0);if(el)el.textContent=`✓ 常時自動保存 接続｜${total}R｜${updatedAt}更新${imported||updated?`｜端末へ${imported+updated}件反映`:''}${archiveError?'｜過去履歴は同期待ち':!historyRequested?'｜過去履歴は成績欄で取得':''}`;
       return{imported,updated}
     }catch(e){if(el)el.textContent='常時自動保存：接続待ち｜'+e.message;return null}
   }
+  function syncServerPredictions(){
+    if(hotPromise)return hotPromise;
+    hotPromise=syncHot().finally(()=>{hotPromise=null});return hotPromise;
+  }
+  window.v8LoadFullHistory=()=>{
+    historyRequested=true;
+    if(historyPromise)return historyPromise;
+    if(window.__v8HistoryStatus==='ready')return Promise.resolve();
+    window.__v8HistoryStatus='loading';
+    historyPromise=(async()=>{
+      try{
+        if(hotPromise)await hotPromise;
+        if(!currentData)await syncServerPredictions();
+        if(!currentData)throw Error('直近データの取得待ち');
+        if(window.__v8HistoryStatus!=='ready')await syncArchives();
+        window.__v8HistoryStatus='ready';
+      }catch(e){window.__v8HistoryStatus='error';const el=diag();if(el)el.textContent='過去履歴は同期待ち｜'+e.message}
+      publish();
+    })().finally(()=>{historyPromise=null});
+    publish();
+    return historyPromise;
+  };
   window.syncServerPredictions=syncServerPredictions;
   setTimeout(syncServerPredictions,900);setInterval(syncServerPredictions,180000);
 })();

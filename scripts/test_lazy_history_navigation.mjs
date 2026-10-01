@@ -1,0 +1,13 @@
+import fs from 'node:fs';import vm from 'node:vm';import assert from 'node:assert/strict';
+let loadCount=0,observerCallback,barClick,documentClick,scrolled=false;
+const panel={scrollIntoView:()=>{scrolled=true},closest(){return this}};
+const button={dataset:{navTarget:'results'},classList:{toggle:()=>{}},setAttribute:()=>{}};
+const bar={querySelectorAll:()=>[button],addEventListener:(type,fn)=>{barClick=fn}};
+const c={window:{v8LoadFullHistory:()=>{loadCount++},addEventListener:()=>{}},document:{querySelector:()=>bar,getElementById:()=>panel,addEventListener:(type,fn)=>{if(type==='click')documentClick=fn}},IntersectionObserver:class{constructor(fn){observerCallback=fn}observe(){}},Date};
+vm.createContext(c);vm.runInContext(fs.readFileSync(new URL('../navigation.js',import.meta.url),'utf8'),c);
+assert.equal(loadCount,0);
+observerCallback([{isIntersecting:false}]);assert.equal(loadCount,0);
+await barClick({target:{closest:()=>button}});assert.equal(loadCount,1);assert.equal(scrolled,true);
+observerCallback([{isIntersecting:true}]);assert.equal(loadCount,2);
+documentClick({target:{closest:()=>({})}});assert.equal(loadCount,3);
+console.log('History loads only on results navigation, visible statistics or explicit retry OK');
