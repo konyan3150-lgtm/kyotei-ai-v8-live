@@ -1,0 +1,96 @@
+{
+  "audit": {
+    "training_races": 55301,
+    "periods": {
+      "test": {
+        "min": "2025-02-14",
+        "max": "2025-03-31",
+        "count": 6998
+      },
+      "train": {
+        "min": "2024-04-01",
+        "max": "2024-12-31",
+        "count": 41441
+      },
+      "validate": {
+        "min": "2025-01-01",
+        "max": "2025-02-13",
+        "count": 6862
+      }
+    },
+    "server_unique_races": 1741,
+    "server_settled": 1736,
+    "server_result_conflicts": [],
+    "expert_v2_status": "not located; not included",
+    "ev_status": "not evaluated: historical pre-deadline odds for all tickets are required",
+    "scope": "offline only; no production or saved financial history mutation"
+  },
+  "calibration_comparison": {
+    "rank1": {
+      "raw": {
+        "brier": 0.0986937724155054,
+        "log_loss": 0.3272176357420022,
+        "race_pick_accuracy": 0.5707344955701629
+      },
+      "old_isotonic": {
+        "brier": 0.09877441474294266,
+        "log_loss": 0.3276804000214019,
+        "race_pick_accuracy": 0.5685910260074307
+      },
+      "platt": {
+        "brier": 0.09868806382336966,
+        "log_loss": 0.3271734747110197,
+        "race_pick_accuracy": 0.5707344955701629
+      },
+      "recent_platt_half_life_21d": {
+        "brier": 0.09872724483788234,
+        "log_loss": 0.32726590880196615,
+        "race_pick_accuracy": 0.5707344955701629
+      }
+    },
+    "rank2": {
+      "raw": {
+        "brier": 0.1331419748041484,
+        "log_loss": 0.42752990851912837,
+        "race_pick_accuracy": 0.28008002286367534
+      },
+      "old_isotonic": {
+        "brier": 0.13320693265879222,
+        "log_loss": 0.42794728398152054,
+        "race_pick_accuracy": 0.28122320663046585
+      },
+      "platt": {
+        "brier": 0.133145646201265,
+        "log_loss": 0.42754308279839165,
+        "race_pick_accuracy": 0.28008002286367534
+      },
+      "recent_platt_half_life_21d": {
+        "brier": 0.13316211553934215,
+        "log_loss": 0.4275944069210405,
+        "race_pick_accuracy": 0.28008002286367534
+      }
+    },
+    "rank3": {
+      "raw": {
+        "brier": 0.13583369700522072,
+        "log_loss": 0.4374456670334236,
+        "race_pick_accuracy": 0.2276364675621606
+      },
+      "old_isotonic": {
+        "brier": 0.1358465819923103,
+        "log_loss": 0.43753246630244075,
+        "race_pick_accuracy": 0.22606458988282366
+      },
+      "platt": {
+        "brier": 0.13583700250750383,
+        "log_loss": 0.43747190590098106,
+        "race_pick_accuracy": 0.2276364675621606
+      },
+      "recent_platt_half_life_21d": {
+        "brier": 0.13584217442825286,
+        "log_loss": 0.4375024568960005,
+        "race_pick_accuracy": 0.2276364675621606
+      }
+    }
+  }
+}
