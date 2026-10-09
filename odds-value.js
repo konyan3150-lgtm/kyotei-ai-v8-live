@@ -17,7 +17,10 @@
   function valueCandidates(rows,mode){
     const record=currentOdds(),threshold=EV_THRESHOLDS[mode]||1.15;
     if(!record)return{available:false,status:oddsStatus,threshold,picks:[],record:null};
-    const all=makeBets(rows,120,'hit').map(x=>{const odds=oddsFor(record,x.combo),prob=Number(x.share||0),safeProb=prob*SAFETY_FACTOR;return{...x,prob,safeProb,odds,ev:safeProb*odds}}).filter(x=>x.odds>0&&x.prob>=.002);
+    const calibrated=typeof calibratedPredictionRows==='function'?calibratedPredictionRows(rows):rows;
+    const strength=new Map(calibrated.slice().sort((a,b)=>weightedV8Total(b.p)-weightedV8Total(a.p)).map((z,i)=>[z.k,i]));
+    let all=[];for(const x of calibrated)for(const y of calibrated)for(const z of calibrated){if(x.k===y.k||x.k===z.k||y.k===z.k)continue;const raw=Math.max(1e-12,Number(x.p?.[0]))*Math.max(1e-12,Number(y.p?.[1]))*Math.max(1e-12,Number(z.p?.[2]));all.push({combo:`${x.k}-${y.k}-${z.k}`,boats:[x.k,y.k,z.k],ranks:[strength.get(x.k)||0,strength.get(y.k)||0,strength.get(z.k)||0],raw})}
+    const total=all.reduce((s,x)=>s+x.raw,0)||1;all=all.map(x=>{const odds=oddsFor(record,x.combo),prob=x.raw/total,safeProb=prob*SAFETY_FACTOR;return{...x,prob,safeProb,odds,ev:safeProb*odds}}).filter(x=>x.odds>0&&x.prob>=.002);
     const favorite=rows.slice().sort((a,b)=>Number(b.p?.[0]||0)-Number(a.p?.[0]||0))[0]?.k;
     const candidates=mode==='hit'?all.filter(x=>x.boats?.[0]===favorite&&x.ranks?.[1]<=3&&x.ranks?.[2]<=4):all;
     const pool=candidates.sort((a,b)=>b.prob-a.prob).slice(0,POOL_LIMITS[mode]||120);
@@ -29,27 +32,58 @@
   function cancelledRace(r){return typeof isRaceCancelled==='function'&&isRaceCancelled(r,D?.programs?.stadiums?.[sid]?.races)}
 
   function savedValueMode(){
-    try{const rec=JSON.parse(localStorage.getItem(resultStoreKey())||'null');return rec?.value_modes?.[valuePredictionMode]||null}catch(e){return null}
+    const key=resultStoreKey();let rec=window.v8GetServerPrediction?.(key);
+    if(!rec)try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
+    const m=rec?.value_modes?.[valuePredictionMode];
+    return m?{...m,snapshot_at:rec.value_saved_at||rec.odds_snapshot_at||rec.saved_at||null,display_state:window.v8ValueRecordState(rec,valuePredictionMode)}:null;
   }
-  function renderSavedValueBets(saved){
+  function renderSavedValueBets(saved,closed=true){
     const el=document.getElementById('bets');if(!el||!saved)return false;
-    const items=Array.isArray(saved.items)?saved.items:[];if(!items.length)return false;
-    const strong=items.some(x=>Number(x.ev)>=1.30),thick=items.some(x=>Number(x.ev)>=1.15);
-    el.innerHTML=`<div class="odds-head">保存済み期待値買い目 <b>${items.length}点</b><span>締切前保存データ</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり（保存時）</div>':thick?'<div class="ev-race-alert">厚張り候補あり（保存時）</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${items.map(x=>`<tr><td>${x.combo}</td><td>${(Number(x.prob||0)*100).toFixed(1)}%</td><td>${Number(x.odds||0).toFixed(1)}</td><td class="${Number(x.ev)>=1.15?'ev-high':''}">${Number(x.ev||0).toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${Number(x.stake||stakeForEv(x.ev)).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">終了済みレース：締切前に保存したオッズ・EVから表示</div>`;return true
+    const items=Array.isArray(saved.items)?saved.items:[],picks=Array.isArray(saved.picks)?saved.picks:[];
+    const stamp=Date.parse(saved.snapshot_at||'');
+    const savedTime=Number.isFinite(stamp)?new Date(stamp).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'時刻不明';
+    const note=closed?'終了済みレース：締切前に保存したオッズ・EVから表示':`保存欄と同じ買い目｜${savedTime}保存｜サーバー同期で更新`;
+    if(items.length){
+      const strong=items.some(x=>Number(x.ev)>=1.30),thick=items.some(x=>Number(x.ev)>=1.15);
+      el.innerHTML=`<div class="odds-head">保存済み期待値買い目 <b>${items.length}点</b><span>${savedTime}保存</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり（保存時）</div>':thick?'<div class="ev-race-alert">厚張り候補あり（保存時）</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${items.map(x=>`<tr><td>${x.combo}</td><td>${(Number(x.prob||0)*100).toFixed(1)}%</td><td>${Number(x.odds||0).toFixed(1)}</td><td class="${Number(x.ev)>=1.15?'ev-high':''}">${Number(x.ev||0).toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${Number(x.stake||stakeForEv(x.ev)).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">${note}</div>`;return true
+    }
+    if(!picks.length){
+      const state=saved.display_state;
+      el.innerHTML='<div class="odds-wait">'+(state?.kind==='skipped'?'締切前保存：見送り｜'+state.reason:state?.reason||'締切前の期待値買い目は0点でした')+'</div>';return true;
+    }
+    el.innerHTML=`<div class="odds-head">保存済み期待値買い目 <b>${picks.length}点</b><span>${savedTime}保存</span></div><table class="bettable value-table"><thead><tr><th>組番</th><th>保存状態</th></tr></thead><tbody>${picks.map(combo=>`<tr><td>${String(combo)}</td><td>締切前保存</td></tr>`).join('')}</tbody></table><div class="value-note">${note}。保存記録にEV・オッズ詳細がないため、組番のみ表示しています。</div>`;return true
   }
   function renderValueBets(rows){
     const el=document.getElementById('bets');if(!el)return;
     const r=D?.programs?.stadiums?.[sid]?.races?.[rno];if(cancelledRace(r)){el.innerHTML='<div class="odds-wait">開催中止のため買い目対象外</div>';return}const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN,official=!!r?.result?.payouts?.trifecta?.[0]||(typeof hasOfficialResult==='function'&&hasOfficialResult(r)),closed=official||(Number.isFinite(close)&&close<=Date.now());if(closed){const saved=savedValueMode();if(renderSavedValueBets(saved))return;el.innerHTML='<div class="odds-wait">締切済み｜締切前の保存買い目がありません</div>';return}
+    const authoritative=window.v8GetServerPrediction?.(resultStoreKey());
+    if(authoritative?.source==='server'&&authoritative.value_modes?.[valuePredictionMode]){
+      renderSavedValueBets(savedValueMode(),false);return;
+    }
     const value=valueCandidates(rows,valuePredictionMode);
     if(!value.available){el.innerHTML=`<div class="odds-wait">${oddsStatus==='loading'?'3連単オッズ取得中…':'3連単オッズ未取得｜期待値判定待機'}</div>`;return}
     const updated=value.record?.fetched_at?new Date(value.record.fetched_at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}):'--:--';
     if(!value.picks.length){el.innerHTML=`<div class="odds-head">期待値判定 <b>見送り</b><span>オッズ ${updated}更新</span></div><div class="value-empty">基準EV ${value.threshold.toFixed(2)}以上の買い目がありません。</div>`;return}
-    const strong=value.picks.some(x=>x.ev>=1.30),thick=value.picks.some(x=>x.ev>=1.15);el.innerHTML=`<div class="odds-head">期待値買い目 <b>${value.picks.length}点</b><span>オッズ ${updated}更新</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり</div>':thick?'<div class="ev-race-alert">厚張り候補あり</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${value.picks.map(x=>`<tr><td>${x.combo}</td><td>${(x.safeProb*100).toFixed(1)}%</td><td>${x.odds.toFixed(1)}</td><td class="${x.ev>=1.15?'ev-high':''}">${x.ev.toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${stakeForEv(x.ev).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">確率は安全率75%で計算｜EV別推奨額：1.00〜 ¥100 / 1.15〜 ¥200 / 1.30〜 ¥300｜最大4点</div>`
+    const strong=value.picks.some(x=>x.ev>=1.30),thick=value.picks.some(x=>x.ev>=1.15);el.innerHTML=`<div class="odds-head">期待値買い目 <b>${value.picks.length}点</b><span>オッズ ${updated}更新</span></div>${strong?'<div class="ev-race-alert strong">🔥 厚張り候補あり</div>':thick?'<div class="ev-race-alert">厚張り候補あり</div>':''}<table class="bettable value-table"><thead><tr><th>組番</th><th>V8確率</th><th>オッズ</th><th>EV</th><th>判断</th><th>推奨額</th></tr></thead><tbody>${value.picks.map(x=>`<tr><td>${x.combo}</td><td>${(x.safeProb*100).toFixed(1)}%</td><td>${x.odds.toFixed(1)}</td><td class="${x.ev>=1.15?'ev-high':''}">${x.ev.toFixed(2)}</td><td>${stakeBadge(x.ev)}</td><td>¥${stakeForEv(x.ev).toLocaleString()}</td></tr>`).join('')}</tbody></table><div class="value-note">全120通り正規化＋確率校正＋安全率75%｜EV別推奨額：1.00〜 ¥100 / 1.15〜 ¥200 / 1.30〜 ¥300｜最大4点</div>`
   }
 
   function renderBaseBetsPanel(rows){
     const el=document.getElementById('baseBets');if(!el)return;
     const r=D?.programs?.stadiums?.[sid]?.races?.[rno];if(cancelledRace(r)){el.innerHTML='<div class="odds-wait">開催中止のため買い目対象外</div>';return}
+    // After a race closes, never replace its saved V8 picks with freshly computed picks.
+    const close=typeof raceCloseMs==='function'?raceCloseMs(r):NaN;
+    const closed=(typeof hasOfficialResult==='function'&&hasOfficialResult(r))||(Number.isFinite(close)&&close<=Date.now());
+    const stored=savedRaceRecord(rno);
+    const authoritative=stored?.source==='server';
+    const savedMode=stored?.modes?.[basePredictionMode]||((stored?.mode||'hit')===basePredictionMode&&Array.isArray(stored?.picks)?{picks:stored.picks}:null);
+    if((closed||authoritative)&&savedMode){
+      const savedPicks=Array.isArray(savedMode.picks)?savedMode.picks:[];
+      el.innerHTML=savedPicks.length
+        ?'<div class="modehint">保存済みV8買い目（再計算なし）</div><table class="bettable"><thead><tr><th>順</th><th>組番</th></tr></thead><tbody>'+savedPicks.map((combo,i)=>'<tr><td>'+(i+1)+'</td><td>'+String(combo).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';')+'</td></tr>').join('')+'</tbody></table>'
+        :'<div class="odds-wait">保存済みV8買い目はありません</div>';
+      return;
+    }
+    if(closed||authoritative){el.innerHTML='<div class="odds-wait">締切前のV8保存買い目がありません</div>';return}
     if(typeof models==='undefined'||models.length!==3){el.textContent='V8モデル待機中';return}
     const picks=makeBets(rows,6,basePredictionMode);
     if(!picks.length){el.textContent='通常V8買い目を計算できません';return}
@@ -66,21 +100,40 @@
     rec.value_modes=rec.value_modes||{};
     for(const mode of ['hit','balance','return']){const v=valueCandidates(rows,mode),picks=v.picks.map(x=>x.combo);const items=v.picks.map(x=>({combo:x.combo,prob:x.safeProb,odds:x.odds,ev:x.ev,stake:stakeForEv(x.ev)})),stake=items.reduce((s,x)=>s+x.stake,0);rec.value_modes[mode]={picks,stake,settled:false,hit:false,payout:0,skipped:!picks.length,threshold:v.threshold,stake_strategy:'ev_tier_v1',items}}
     const oddsAt=currentOdds().fetched_at||new Date().toISOString();
-    rec.odds_snapshot_at=oddsAt;rec.value_mode=valuePredictionMode;rec.value_model_version=3;rec.value_saved_at=new Date().toISOString();
+    rec.odds_snapshot_at=oddsAt;rec.value_mode=valuePredictionMode;rec.value_model_version=4;rec.probability_calibration=typeof v8CalibrationStatus==='function'?v8CalibrationStatus():{active:false};rec.value_saved_at=new Date().toISOString();
     // Keep the saved EV picks tied to the exact odds snapshot used for the on-screen EV calculation.
     // recommendation.js will stamp the matching recommendation with this same odds timestamp.
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
   }
   const baseSavePredictionSnapshot=savePredictionSnapshot;
-  savePredictionSnapshot=function(r,rows){const ok=baseSavePredictionSnapshot(r,rows);saveValueSnapshot(r,rows);return ok};
+  savePredictionSnapshot=function(r,rows){
+    try{if(JSON.parse(localStorage.getItem(resultStoreKey())||'null')?.source==='server')return false}catch(e){return false}
+    const ok=baseSavePredictionSnapshot(r,rows);saveValueSnapshot(r,rows);return ok
+  };
 
   const baseSettlePredictionKey=settlePredictionKey;
-  settlePredictionKey=function(r,key){const changed=baseSettlePredictionKey(r,key),t=r?.result?.payouts?.trifecta?.[0];if(!t)return changed;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return changed}if(!rec?.value_modes)return changed;const combo=String(t.combination||'').trim(),amount=Number(t.amount||0);for(const mode of Object.keys(rec.value_modes)){const m=rec.value_modes[mode];m.settled=true;m.result=combo;m.hit=Array.isArray(m.picks)&&m.picks.includes(combo);const hitItem=Array.isArray(m.items)?m.items.find(x=>x.combo===combo):null;m.payout=m.hit?amount*(Number(hitItem?.stake||100)/100):0}try{localStorage.setItem(key,JSON.stringify(rec))}catch(e){}return true};
+  settlePredictionKey=function(r,key){
+    let before;try{before=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}
+    // Imported records are settled by the server; never recalculate their money on a device.
+    if(before?.source==='server'||before?.cancelled)return false;
+    const changed=baseSettlePredictionKey(r,key),t=r?.result?.payouts?.trifecta?.[0];if(!t)return changed;
+    let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return changed}
+    if(!rec?.value_modes)return changed;
+    const combo=String(t.combination||'').trim(),amount=Number(t.amount||0);let valueChanged=false;
+    for(const m of Object.values(rec.value_modes)){
+      if(!m||m.settled||m.cancelled)continue;
+      m.settled=true;m.result=combo;m.hit=Array.isArray(m.picks)&&m.picks.includes(combo);
+      const hitItem=Array.isArray(m.items)?m.items.find(x=>x.combo===combo):null;
+      m.payout=m.hit?amount*(Number(hitItem?.stake||100)/100):0;valueChanged=true
+    }
+    if(!valueChanged)return changed;
+    try{localStorage.setItem(key,JSON.stringify(rec))}catch(e){return changed}return true
+  };
 
   async function loadLiveOdds(){
     if(typeof dateOffset!=='undefined'&&dateOffset!==0){oddsStatus='unavailable';return}
-    try{const res=await fetch(`odds.json?d=${day()}&x=${Date.now()}`,{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(String(data?.date)!==String(day())||!data?.races)throw new Error('本日データ待機中');oddsPayload=data;oddsStatus='ok'}catch(e){oddsPayload=null;oddsStatus='unavailable'}
-    try{if(D&&sid){if(typeof autoSaveAllPredictions==='function')autoSaveAllPredictions();draw()}}catch(e){}
+    try{let data=null,last='';const urls=[`https://raw.githubusercontent.com/konyan3150-lgtm/kyotei-ai-v8-live/main/odds.json?d=${day()}&x=${Date.now()}`,`odds.json?d=${day()}&x=${Date.now()}`];for(const url of urls){try{const res=await fetch(url,{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);const candidate=await res.json();if(String(candidate?.date)!==String(day())||!candidate?.races)throw new Error('本日データ待機中');data=candidate;break}catch(e){last=e.message}}if(!data)throw new Error(last||'本日オッズ未取得');oddsPayload=data;oddsStatus='ok'}catch(e){oddsPayload=null;oddsStatus='unavailable'}
+    try{if(D&&sid)draw()}catch(e){}
   }
   setTimeout(loadLiveOdds,500);setInterval(loadLiveOdds,180000);
 })();

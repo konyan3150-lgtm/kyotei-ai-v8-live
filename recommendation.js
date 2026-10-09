@@ -40,7 +40,7 @@
         if(!value.picks.length){level='skip';reasons.push(`期待値EV ${value.threshold.toFixed(2)}以上なし`)}
         else reasons.push(`期待値買い目 ${value.picks.length}点・最高EV ${Math.max(...value.picks.map(x=>x.ev)).toFixed(2)}`)
       }else{
-        if(mode==='return')level='skip';else if(level==='buy')level='caution';
+        level='none';
         reasons.push('3連単オッズ未取得のため購入推奨を保留')
       }
     }
@@ -54,7 +54,7 @@
   function saveAssessments(r,rows,recs,baseRecs){
     if(!openForSaving(r))return false;
     const key=resultStoreKey();let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){return false}
-    if(!rec||rec.settled)return false;
+    if(!rec||rec.settled||rec.source==='server')return false;
     // Persist the purchase decision against the same odds snapshot as the saved EV picks.
     const oddsAt=rec.odds_snapshot_at||null;
     recs=Object.fromEntries(Object.entries(recs||{}).map(([mode,x])=>[mode,{...x,odds_snapshot_at:oddsAt}]));
@@ -63,12 +63,19 @@
     try{localStorage.setItem(key,JSON.stringify(rec));return true}catch(e){return false}
   }
 
-  function storedAssessments(){let rec;try{rec=JSON.parse(localStorage.getItem(resultStoreKey())||'null')}catch(e){}return rec?.recommendations||null}
-  function storedBaseAssessments(){let rec;try{rec=JSON.parse(localStorage.getItem(resultStoreKey())||'null')}catch(e){}return rec?.base_recommendations||null}
+  function savedDecision(){
+    const key=resultStoreKey(),server=window.v8GetServerPrediction?.(key);
+    if(server)return server;
+    let local=null;try{local=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
+    return local||server||null
+  }
+  function storedAssessments(){return window.v8SavedValueRecommendations(savedDecision())}
+  function storedBaseAssessments(){return savedDecision()?.base_recommendations||null}
   function recommendedStats(mode,isBase=false){
+    if(window.__v8HistoryStatus&&window.__v8HistoryStatus!=='ready')return null;
     let races=0,hits=0,invest=0,payout=0;
-    for(let i=0;i<localStorage.length;i++){
-      const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;let rec;try{rec=JSON.parse(localStorage.getItem(key)||'null')}catch(e){continue}
+    const records=window.v8GetSavedPredictions?.()||(()=>{const out={};try{for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key?.startsWith(PREFIX))try{out[key]=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}}}catch(e){}return out})();
+    for(const rec of Object.values(records)){
       if(rec?.source!=='server')continue;
       const recommendation=isBase?rec?.base_recommendations?.[mode]:rec?.recommendations?.[mode];
       if(recommendation?.level!=='buy')continue;
@@ -90,24 +97,19 @@
   }
   function boxHtml(title,recs,currentMode,stats){
     let current=recs[currentMode]||recs.hit;
-    // Legacy/synced records can contain a valid purchase level but a missing/zero score.
-    // Never render that contradictory state as "購入推奨 0/100"; rebuild a display score
-    // from the assessment inputs while preserving the recorded purchase level.
-    if(current&&current.level!=='none'&&Number(current.score||0)<=0){
-      const top=Number(current.top||0),gap=Number(current.gap||0),coverage=Number(current.coverage||0),hole=Number(current.hole||0);
-      let rebuilt=currentMode==='hit'?top*58+gap*85+coverage*.32:currentMode==='balance'?top*52+gap*72+coverage*.36:hole*80+top*34+coverage*.45;
-      if(!Number.isFinite(rebuilt)||rebuilt<=0)rebuilt=current.level==='buy'?70:current.level==='caution'?50:1;
-      current={...current,score:Math.max(1,Math.min(100,Math.round(rebuilt)))};
-    }
+    const score=Number(current?.score),hasScore=current?.level!=='none'&&current?.score!=null&&Number.isFinite(score)&&score>0;
+    const reasons=current?.reasons?.length?current.reasons:
+      current?.level==='none'?['締切前の判定記録がありません']:
+      ['締切前の購入判断は保存済みです。判定指数の詳細は保存されていません'];
     const chips=MODES.map(m=>`<div class="recommend-chip ${m===currentMode?'active':''} ${recs[m]?.level||'none'}"><span>${LABELS[m]}</span><b>${LEVELS[recs[m]?.level]||'判定なし'}</b></div>`).join('');
-    const statText=stats.races?`購入推奨のみ：${stats.races}R・的中率 ${stats.hitRate.toFixed(1)}%・回収率 ${stats.roi.toFixed(1)}%`:'購入推奨の確定実績は、これから蓄積されます';
-    return `<div class="recommend-title"><span>${title}</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${Number(current.score||0)}</b>/100</div><ul>${(current.reasons||[]).map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
+    const statText=!stats?'全期間の推奨成績は、結果・成績欄を開くと取得します。':stats.races?`購入推奨のみ：${stats.races}R・的中率 ${stats.hitRate.toFixed(1)}%・回収率 ${stats.roi.toFixed(1)}%`:'購入推奨の確定実績は、これから蓄積されます';
+    return `<div class="recommend-title"><span>${title}</span><strong class="${current.level}">${LEVELS[current.level]||'判定なし'}</strong></div><div class="recommend-chips">${chips}</div><div class="recommend-score">判定指数 <b>${hasScore?Math.round(score):'--'}</b>${hasScore?'/100':''}</div><ul>${reasons.map(x=>`<li>${String(x)}</li>`).join('')}</ul><div class="recommend-stats">${statText}</div>`
   }
   function renderRecommendation(r,rows){
     const box=ensureBox();if(!box)return;
     const cancelled=typeof isRaceCancelled==='function'&&isRaceCancelled(r,D?.programs?.stadiums?.[sid]?.races),cancelledRecs=()=>Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['開催中止のため購入対象外です']} ]));
     let recs=allAssessments(r,rows),isOpen=openForSaving(r),saved=storedAssessments();
-    if(cancelled)recs=cancelledRecs();else if(!isOpen){if(saved)recs=saved;else recs=Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['締切前の判定記録がありません']}]))}
+    if(cancelled)recs=cancelledRecs();else if(savedDecision()?.source==='server'||!isOpen){if(saved)recs=saved;else recs=Object.fromEntries(MODES.map(m=>[m,{level:'none',score:0,reasons:['締切前の判定記録がありません']}]))}
     box.innerHTML=boxHtml('V8 購入判断（期待値対応）',recs,valuePredictionMode,recommendedStats(valuePredictionMode))
     const baseBox=ensureBaseBox();if(!baseBox)return;
     let baseRecs=allBaseAssessments(r,rows),savedBase=storedBaseAssessments();

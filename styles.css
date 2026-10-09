@@ -19,3 +19,8 @@ html{scroll-behavior:smooth}.nav-anchor{scroll-margin-top:12px}.bottomnav button
 #raceScroll .racechip.race-cancelled{background:#202830!important;border-color:#87939d!important;color:#c3cbd2!important;opacity:.78}.racebadge.cancelled{background:#53616d;color:#fff}.venuechip .vnext.cancelled{color:#aeb8c0}
 #raceScroll .racechip.race-cancelled.active{box-shadow:0 0 0 2px #fff}.lg-frame.result-cancelled{border-color:#87939d;background:#202830}
 .stats-section-title{margin-top:14px;padding-top:11px;border-top:1px solid #214b6d;color:#a9dcff}
+
+/* iOS standalone mode can drop long gradient tiles under memory pressure. */
+html,body{background-color:#040b13!important}
+body{background-image:none!important}
+.wrap{background:linear-gradient(180deg,#0b2843 0,#061322 520px,#040b13 1100px);background-repeat:no-repeat;background-color:#040b13}

@@ -6,13 +6,20 @@
   const dateLabel=v=>String(v||'').replace(/^(\d{4})(\d{2})(\d{2})$/,'$1/$2/$3');
   const dateValue=v=>{const m=String(v||'').match(/^(\d{4})(\d{2})(\d{2})$/);return m?Date.UTC(+m[1],+m[2]-1,+m[3]):0};
 
+  let serverRecords=[];
+  function acceptServerRecords(data){
+    serverRecords=Object.values(data?.records||{}).filter(x=>x&&x.source==='server');
+    render();
+  }
   function records(){
-    const out=[];
+    const map=new Map();
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);if(!key?.startsWith(PREFIX))continue;
-      try{const x=JSON.parse(localStorage.getItem(key)||'null');if(x?.source==='server')out.push(x)}catch(e){}
+      try{const x=JSON.parse(localStorage.getItem(key)||'null');if(x?.date&&x?.stadium&&x?.race)map.set(`${x.date}_${x.stadium}_${x.race}`,x)}catch(e){}
     }
-    return out.sort((a,b)=>dateValue(b.date)-dateValue(a.date)||Number(b.race||0)-Number(a.race||0)||Number(b.stadium||0)-Number(a.stadium||0));
+    const latest=window.__v8ServerPredictionData?Object.values(window.v8GetSavedPredictions?.()||window.__v8ServerPredictionData.records||{}):serverRecords;
+    for(const x of latest){const k=`${x.date}_${x.stadium}_${x.race}`,prev=map.get(k);if(!prev||Date.parse(x.settled_at||x.saved_at||0)>=Date.parse(prev.settled_at||prev.saved_at||0))map.set(k,x)}
+    return [...map.values()].sort((a,b)=>dateValue(b.date)-dateValue(a.date)||Number(b.race||0)-Number(a.race||0)||Number(b.stadium||0)-Number(a.stadium||0));
   }
 
   function modeRecord(rec,mode,view){
@@ -21,7 +28,7 @@
       if((rec?.mode||'hit')===mode&&rec?.picks)return {picks:rec.picks,stake:rec.stake,settled:rec.settled,hit:rec.hit,payout:rec.payout,result:rec.result};
       return null
     }
-    if(rec?.value_model_version===3&&rec?.value_modes?.[mode])return rec.value_modes[mode];
+    if(Number(rec?.value_model_version)>=3&&rec?.value_modes?.[mode])return rec.value_modes[mode];
     return null;
   }
 
@@ -42,17 +49,30 @@
   function render(){
     ensurePanel();
     const panel=document.getElementById('historyPanel');if(!panel)return;
+    if(window.__v8HistoryStatus&&window.__v8HistoryStatus!=='ready'){
+      document.getElementById('historySummary').textContent=window.__v8HistoryStatus==='loading'?'全期間の履歴を読み込み中…':'過去履歴は、この欄を開いた時に取得します。';
+      document.getElementById('historyList').innerHTML=window.__v8HistoryStatus==='loading'?'':'<button type="button" data-load-history>履歴を読み込む</button>';
+      return;
+    }
     const view=document.querySelector('.prediction-type-tabs button.active')?.dataset.view==='base'?'base':'value';
     const title=document.getElementById('historyTitle');if(title)title.textContent=(view==='base'?'V8':'期待値')+' レース履歴・絞り込み成績';
     const scopeLabel=document.getElementById('historyScopeLabel');if(scopeLabel)scopeLabel.hidden=view!=='base';
     const all=records(),venue=document.getElementById('historyVenue'),oldVenue=venue.value;
-    const venues=[...new Map(all.map(x=>[String(x.stadium||''),x.stadium_name||((typeof N!=='undefined'&&N[x.stadium])||x.stadium)]).filter(x=>x[0])).entries()].sort((a,b)=>Number(a[0])-Number(b[0]));
+    const period=document.getElementById('historyPeriod').value;
+    const todayKey=typeof jstDate==='function'?jstDate(0):new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Tokyo'}).replaceAll('-','');
+    const todayValue=dateValue(todayKey);
+    // Prefer today's program, including venues with no saved predictions yet.
+    // When it is unavailable (or tomorrow is displayed), use today's records only.
+    const program=typeof D!=='undefined'&&String(D?.date)===todayKey?D?.programs?.stadiums:null;
+    const venueRows=period==='1'&&program
+      ?Object.entries(program).filter(([,v])=>Object.keys(v?.races||{}).length).map(([id])=>[String(Number(id)),(typeof N!=='undefined'&&N[id])||id])
+      :all.filter(x=>period!=='1'||dateValue(x.date)===todayValue).map(x=>[String(Number(x.stadium)||''),x.stadium_name||((typeof N!=='undefined'&&N[x.stadium])||x.stadium)]);
+    const venues=[...new Map(venueRows.filter(x=>x[0])).entries()].sort((a,b)=>Number(a[0])-Number(b[0]));
     venue.innerHTML='<option value="all">全会場</option>'+venues.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
     if([...venue.options].some(x=>x.value===oldVenue))venue.value=oldVenue;
-    const period=document.getElementById('historyPeriod').value,mode=document.getElementById('historyMode').value,venueId=venue.value,scope=view==='base'?document.getElementById('historyScope').value:'all';
-    const todayValue=dateValue(typeof day==='function'?day():new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Tokyo'}).replaceAll('-',''));
+    const mode=document.getElementById('historyMode').value,venueId=venue.value,scope=view==='base'?document.getElementById('historyScope').value:'all';
     const minDate=period==='all'?0:todayValue-(Number(period)-1)*86400000;
-    const filtered=all.filter(x=>(venueId==='all'||String(x.stadium)===venueId)&&dateValue(x.date)>=minDate);
+    const filtered=all.filter(x=>(venueId==='all'||String(Number(x.stadium))===venueId)&&dateValue(x.date)>=minDate&&(period!=='1'||dateValue(x.date)===todayValue));
     let races=0,hits=0,invest=0,payout=0;
     for(const rec of filtered)for(const item of selectedModes(rec,mode,view)){if(rec.cancelled||!item.data?.settled||item.data.skipped||!Number(item.data.stake))continue;if(scope==='recommended'&&rec?.base_recommendations?.[item.mode]?.level!=='buy')continue;races++;if(item.data.hit)hits++;invest+=Number(item.data.stake||0);payout+=Number(item.data.payout||0)}
     const roi=invest?payout/invest*100:0,hitRate=races?hits/races*100:0,profit=payout-invest;
@@ -75,4 +95,6 @@
   if(baseRenderStats)renderStats=function(){baseRenderStats();render()};
   window.renderPredictionHistory=render;
   render();
+  // Server sync supplies recent data immediately; archives are requested on demand.
 })();
+

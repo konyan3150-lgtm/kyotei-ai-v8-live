@@ -48,9 +48,15 @@
     const target=targetFor(button.dataset.navTarget);
     if(!target)return;
     select(button);
+    if(button.dataset.navTarget==='results')window.v8LoadFullHistory?.();
     target.scrollIntoView({behavior:'smooth',block:'start'});
   });
   document.addEventListener('visibilitychange',refreshOnResume);
   window.addEventListener('pageshow',refreshOnResume);
   window.addEventListener('focus',refreshOnResume);
+  document.addEventListener('click',event=>{if(event.target.closest('[data-load-history]'))window.v8LoadFullHistory?.()});
+  if(typeof IntersectionObserver==='function'){
+    const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting))window.v8LoadFullHistory?.()},{threshold:.05});
+    for(const id of ['valueStats','baseStats','historyPanel']){const el=document.getElementById(id);if(el)observer.observe(id==='historyPanel'?el:el.closest('.panel'))}
+  }
 })();
