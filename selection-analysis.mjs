@@ -29,10 +29,10 @@ function aggregate(events,skipped,kind){
   return {kind,summary:summarize(events),axes,excluded:skipped,limitation:'Fixed descriptive bins overlap across axes. Unknown saved inputs are not reconstructed. No filter fitting, rule changes, or production promotion; future chronological validation is required.'};
 }
 export function analyzeSavedSelections(records,{view='base',mode='hit'}={}){
-  const events=[],skipped={no_mode:0,pending:0,cancelled:0,skipped:0,invalid_money:0};
+  const events=[],skipped={no_mode:0,pending:0,cancelled:0,excluded:0,skipped:0,invalid_money:0};
   for(const r of Object.values(records||{})){
     const m=view==='value'?(Number(r.value_model_version)>=3?r.value_modes?.[mode]:null):(r.modes?.[mode]||((r.mode||'hit')===mode&&r.picks?r:null));
-    if(!m){skipped.no_mode++;continue;}if(r.cancelled||m.cancelled){skipped.cancelled++;continue;}
+    if(!m){skipped.no_mode++;continue;}if(r.excluded||m.excluded){skipped.excluded++;continue;}if(r.cancelled||m.cancelled){skipped.cancelled++;continue;}
     if(m.skipped||!m.picks?.length||Number(m.stake)===0){skipped.skipped++;continue;}if(!(m.settled||r.settled)){skipped.pending++;continue;}
     const investment=numeric(m.stake),payout=numeric(m.payout);if(investment===null||investment<=0||payout===null||payout<0){skipped.invalid_money++;continue;}
     const decision=(view==='value'?r.recommendations:r.base_recommendations)?.[mode]||{},close=deadline(r);

@@ -29,8 +29,13 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
       - name: Sync latest main
         run: git pull --ff-only origin main
+      - name: Capture validated history baseline
+        run: node scripts/verify_prediction_history.mjs dev "$RUNNER_TEMP/prediction-history-baseline.json" --save-baseline
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
@@ -57,10 +62,11 @@ jobs:
       - name: Build lightweight runtime data
         run: node scripts/build_runtime_payloads.mjs
       - name: Save predictions and settle results
-        continue-on-error: true
         run: node scripts/update_server_predictions.mjs
       - name: Backfill historical Expert evaluations
         run: node scripts/backfill_expert_history.mjs
+      - name: Verify history preservation before commit
+        run: node scripts/verify_prediction_history.mjs dev "$RUNNER_TEMP/prediction-history-baseline.json"
       - name: Commit updated odds and predictions
         run: |
           if git diff --quiet -- odds.json dev/odds.json dev/official-results.json dev/official-previews.json dev/racer-aptitude-runtime.json.gz dev/course-stats-runtime.json dev/server-predictions.json dev/server-predictions-index.json dev/server-predictions-archive; then
@@ -71,5 +77,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add odds.json dev/odds.json dev/official-results.json dev/official-previews.json dev/racer-aptitude-runtime.json.gz dev/course-stats-runtime.json dev/server-predictions.json dev/server-predictions-index.json dev/server-predictions-archive
           git commit -m "chore: update live odds and predictions"
-          git pull --rebase --autostash
-          git push
+          # A changed remote head rejects this commit; retry from a fresh checkout next run.
+          git push origin HEAD:main

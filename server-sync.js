@@ -24,7 +24,7 @@
   }
   function freshness(data){
     const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/-/g,'');
-    const pending=Object.entries(data.records||{}).some(([key,r])=>r&&key.startsWith(PREFIX+today+'_')&&!r.settled&&!r.cancelled);
+    const pending=Object.entries(data.records||{}).some(([key,r])=>r&&key.startsWith(PREFIX+today+'_')&&!r.settled&&!r.cancelled&&!r.excluded);
     const age=Date.now()-stamp(data.updated_at);
     return pending&&(!stamp(data.updated_at)||age>20*60000)?'｜更新遅れ：保存・結果反映を待っています':'';
   }

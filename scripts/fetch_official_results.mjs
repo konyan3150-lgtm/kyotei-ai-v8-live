@@ -12,7 +12,8 @@ export function parseOfficialPayPage(html,date=jstDay()){
     const hrefMatch=cells[i].attrs.match(/data-href="([^"]+)"/i);if(!hrefMatch)continue;
     const href=hrefMatch[1].replaceAll('&amp;','&'),params=new URLSearchParams(href.split('?')[1]||''),stadium=String(Number(params.get('jcd'))),race=String(Number(params.get('rno')));
     if(params.get('hd')!==date||Number(stadium)<1||Number(stadium)>24||Number(race)<1||Number(race)>12||!Number.isInteger(Number(stadium))||!Number.isInteger(Number(race)))continue;
-    const resultHtml=cells[i].body,resultText=strip(resultHtml);if(!/numberSet1|中止/.test(resultHtml))continue;
+    const resultHtml=cells[i].body,resultText=strip(resultHtml);if(!/numberSet1|中止|特払/.test(resultHtml))continue;
+    if(/特払/.test(resultText)){(races[stadium]??={})[race]={requires_individual_verification:true};continue}
     if(/中止/.test(resultText)){(races[stadium]??={})[race]={cancelled:true};continue}
     const numbers=[...resultHtml.matchAll(/numberSet1_number[^"']*?\bis-type([1-6])\b/gi)].map(x=>x[1]).slice(0,3),amount=Number(strip(cells[i+1]?.body).replace(/\D/g,''));
     if(numbers.length===3&&new Set(numbers).size===3&&amount>0)(races[stadium]??={})[race]={combination:numbers.join('-'),amount};

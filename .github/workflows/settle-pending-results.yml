@@ -25,8 +25,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - name: Capture saved-purchase baseline
+        run: node scripts/verify_prediction_history.mjs dev "$RUNNER_TEMP/prediction-history-baseline.json" --save-baseline
       - name: Reconcile all pending dates with official payouts
         run: node scripts/settle_pending_results.mjs
+      - name: Verify preserved saved purchases
+        run: node scripts/verify_prediction_history.mjs dev "$RUNNER_TEMP/prediction-history-baseline.json"
       - name: Commit result updates
         run: |
           git add dev/server-predictions.json dev/server-predictions-index.json dev/server-predictions-archive/
@@ -34,5 +38,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Settle pending races from official historical results"
-          git pull --rebase --autostash origin main
           git push origin HEAD:main
