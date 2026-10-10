@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { venuesByRacer, trimAptitude, verifySame } from './runtime_trim.mjs';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const JST_DATE=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replaceAll('-','');
@@ -23,7 +24,9 @@ if(ids.size<100)throw new Error(`program racer coverage too low: ${ids.size}`);
 const aptitude=readJson('racer-aptitude.json'),aptitudeRacers={};
 for(const id of ids)if(aptitude.racers?.[id])aptitudeRacers[id]=aptitude.racers[id];
 const aptitudeRuntime={...aptitude,racers:aptitudeRacers,runtime:{date:JST_DATE,target_count:ids.size,available_count:Object.keys(aptitudeRacers).length,generated_at:new Date().toISOString()}};
-const aptitudeText=JSON.stringify(aptitudeRuntime);
+// The page reads only today's venue for each racer; drop other venues and verify identical lookups.
+const venues=venuesByRacer(program),aptitudeLite=trimAptitude(aptitudeRuntime,venues),checkedLookups=verifySame(aptitudeRuntime,aptitudeLite,venues);
+const aptitudeText=JSON.stringify(aptitudeLite);
 const aptitudeGzip=gzipSync(Buffer.from(aptitudeText),{level:9});
 const aptitudeTarget=path.join(ROOT,'dev/racer-aptitude-runtime.json.gz');
 fs.mkdirSync(path.dirname(aptitudeTarget),{recursive:true});
@@ -33,4 +36,4 @@ const course=readJson('course-stats.json'),courseRacers={};
 for(const id of ids)if(course.racers?.[id])courseRacers[id]=course.racers[id];
 writeJson('dev/course-stats-runtime.json',{...course,racers:courseRacers,runtime:{date:JST_DATE,target_count:ids.size,available_count:Object.keys(courseRacers).length,generated_at:new Date().toISOString()}});
 
-console.log(JSON.stringify({date:JST_DATE,target:ids.size,aptitude:Object.keys(aptitudeRacers).length,aptitude_bytes:aptitudeGzip.length,course:Object.keys(courseRacers).length}));
+console.log(JSON.stringify({date:JST_DATE,target:ids.size,aptitude:Object.keys(aptitudeRacers).length,aptitude_bytes:aptitudeGzip.length,aptitude_checked_lookups:checkedLookups,course:Object.keys(courseRacers).length}));
