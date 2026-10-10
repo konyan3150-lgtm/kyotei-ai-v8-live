@@ -7,7 +7,11 @@
       rno=String(raceNo);rows=predictionRowsForRace(r);
       if(typeof purchaseRecommendationsForRace!=='function')return{state:'pending',value:false,v8:false};
       const recs=purchaseRecommendationsForRace(r,rows),valueMode=MODES.includes(valuePredictionMode)?valuePredictionMode:'hit',baseMode=MODES.includes(basePredictionMode)?basePredictionMode:'hit';
-      value=recs?.value?.[valueMode]?.level==='buy';
+      // Same source as the 期待値 purchase panel: once the server has saved this race before close,
+      // show that saved decision instead of re-judging with odds that moved afterwards.
+      const saved=window.v8GetServerPrediction?.(resultStoreKey());
+      const valueRecs=saved?.source==='server'?window.v8SavedValueRecommendations?.(saved):recs?.value;
+      value=valueRecs?.[valueMode]?.level==='buy';
       v8=recs?.base?.[baseMode]?.level==='buy';
     }catch(e){return{state:'pending',value:false,v8:false}}
     finally{rno=oldRace}
