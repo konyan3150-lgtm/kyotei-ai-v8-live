@@ -2,21 +2,45 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {verifyBudget} from './verify_budget.mjs';
+import {verifyBudget,parseBudgetMs,rotate,FETCH_ATTEMPTS,RETRY_DELAY_MS,MIN_FETCH_TIMEOUT_MS} from './verify_budget.mjs';
 import {recover} from './settle_pending_results.mjs';
 import {parseOfficialPayPage} from './fetch_official_results.mjs';
 import {verifyIndividualResult} from './verified_outcome.mjs';
 import {writeJsonBatch} from './history_store.mjs';
 
-// Budget helper: unlimited by default; a fetch only starts with at least 1s left; per-attempt timeout fits the remaining time.
+// Budget helper: a fetch only starts with at least 1s left; per-attempt timeout fits the remaining time.
 {let t=0;const b=verifyBudget({budgetMs:20000,clock:()=>t});
  assert.equal(b.fetchTimeoutMs(),10000);assert.equal(b.allow(),true);t=12000;assert.equal(b.fetchTimeoutMs(),4000);
  t=18500;assert.equal(b.fetchTimeoutMs(),1000);assert.equal(b.allow(),true);t=19001;assert.equal(b.allow(),false);assert.equal(b.allow(),false);
  b.note('settled');b.note('settled');b.note('pending:payout_pending');
- assert.deepEqual(b.summary(),{limit_ms:20000,elapsed_ms:19001,attempts:2,deferred_by_time_budget:2,outcomes:{settled:2,'pending:payout_pending':1}});}
-{const b=verifyBudget({});for(let i=0;i<1000;i++)assert.equal(b.allow(),true);assert.equal(b.deferred,0);assert.equal(b.limitMs,Infinity);assert.equal(b.fetchTimeoutMs(),15000);}
-{const b=verifyBudget({budgetMs:'bad'});assert.equal(b.limitMs,Infinity);}
-{let t=0;const b=verifyBudget({budgetMs:300000,clock:()=>t});assert.equal(b.fetchTimeoutMs(),15000);}
+ assert.deepEqual(b.summary(),{limit_ms:20000,limit_source:'configured',elapsed_ms:19001,attempts:2,deferred_by_time_budget:2,outcomes:{settled:2,'pending:payout_pending':1}});}
+// Configuration: missing -> default; explicit "unlimited" -> no limit; wrong values -> default (never unlimited by mistake).
+assert.deepEqual(parseBudgetMs(undefined,300000),{ms:300000,source:'default'});
+assert.deepEqual(parseBudgetMs('',300000),{ms:300000,source:'default'});
+assert.deepEqual(parseBudgetMs('120000',300000),{ms:120000,source:'configured'});
+assert.deepEqual(parseBudgetMs('unlimited',300000),{ms:Infinity,source:'unlimited'});
+for(const bad of ['0','-5','abc','NaN','Infinity1',0,-1])assert.equal(parseBudgetMs(bad,300000).ms,300000,String(bad));
+assert.equal(parseBudgetMs('0',300000).source,'invalid_fallback');
+assert.throws(()=>parseBudgetMs('1000',0));
+{const w=console.warn;console.warn=()=>{};try{const b=verifyBudget({budgetMs:'-1',defaultMs:480000});assert.equal(b.limitMs,480000);assert.equal(b.summary().limit_source,'invalid_fallback');}finally{console.warn=w}}
+{const b=verifyBudget({budgetMs:'unlimited'});for(let i=0;i<1000;i++)assert.equal(b.allow(),true);assert.equal(b.fetchTimeoutMs(),15000);assert.equal(b.summary().limit_ms,null);}
+{const b=verifyBudget({});assert.equal(b.limitMs,300000);}
+// Worst case: every started fetch times out on both attempts. Total time stays within the budget + 1.25s.
+for(const limit of [1000,1500,2000,5000,29999,30000,61234,300000,480000]){
+  let t=0;const b=verifyBudget({budgetMs:limit,clock:()=>t});
+  while(b.allow())t+=FETCH_ATTEMPTS*b.fetchTimeoutMs()+RETRY_DELAY_MS;
+  assert.ok(t<=limit+MIN_FETCH_TIMEOUT_MS+RETRY_DELAY_MS,`limit ${limit}: ${t}`);
+}
+// Rotation keeps every item, changes the head between runs.
+assert.deepEqual(rotate([],3),[]);
+for(const n of [1,2,6,10,12,60,97]){const list=[...Array(n).keys()];
+  // Same items in a cyclic order, deterministic per run time.
+  for(const ms of [0,123456789,Date.parse('2026-10-12T13:17:00Z')]){const r=rotate(list,ms);assert.deepEqual([...r].sort((a,b)=>a-b),list);assert.deepEqual(rotate(list,ms),r);
+    for(let i=0;i<n;i++)assert.equal(r[(i+1)%n],(r[i]+1)%n);}
+  // Fixed schedules (hourly at :17, every 6 minutes) still reach many different starting points.
+  if(n>1)for(const step of [60*60000,6*60000]){const heads=new Set();for(let k=0;k<200;k++)heads.add(rotate(list,Date.parse('2026-10-12T00:17:00Z')+k*step)[0]);
+    assert.ok(heads.size>=Math.min(n,Math.ceil(n*0.6)),`n=${n} step=${step}: ${heads.size} starts`);}
+}
 
 // Official pages for one day: race n won 1-2-3 paying 1000+n yen at venue 24.
 const date='20261012',SID='24',lanes=[1,2,3,4,5,6];
@@ -46,14 +70,14 @@ const now=new Date('2026-10-12T14:00:00Z');
 // 1) Budget allows 2 verifications: those 2 are saved, the other 4 stay pending and untouched (never settled unverified).
 {
   const {root,file}=makeRoot(),before=read(file);let t=0,fetched=[];
-  const out=await recover({root,now,verifyBudgetMs:20500,clock:()=>t,fetchPage:async()=>payHtml(races),fetchIndividual:async req=>{fetched.push(req.race);t+=10000;return individual(Number(req.race));}});
+  const out=await recover({root,now,verifyBudgetMs:'55500',clock:()=>t,fetchPage:async()=>payHtml(races),fetchIndividual:async req=>{fetched.push(req.race);t+=30000;return individual(Number(req.race));}});
   assert.equal(out.settled,2);assert.equal(out.deferred,4);assert.equal(fetched.length,2);
   const after=read(file),done=Object.values(after).filter(r=>r.settled);
   assert.equal(done.length,2);for(const r of done)assert.equal(r.modes.hit.payout,(1000+Number(r.race)));
   for(const [k,r] of Object.entries(after))if(!r.settled)assert.deepEqual(r,before[k]);
   // 2) Next run continues from where it stopped and finishes the backlog.
   t=0;fetched=[];
-  const out2=await recover({root,now,verifyBudgetMs:20500,clock:()=>t,fetchPage:async()=>payHtml(races),fetchIndividual:async req=>{fetched.push(req.race);t+=10000;return individual(Number(req.race));}});
+  const out2=await recover({root,now,verifyBudgetMs:'55500',clock:()=>t,fetchPage:async()=>payHtml(races),fetchIndividual:async req=>{fetched.push(req.race);t+=30000;return individual(Number(req.race));}});
   assert.equal(out2.settled,2);assert.ok(fetched.every(r=>!done.some(d=>d.race===r)));
   const out3=await recover({root,now,fetchPage:async()=>payHtml(races),fetchIndividual:async req=>individual(Number(req.race))});
   assert.equal(out3.settled,2);assert.equal(out3.pending,0);assert.equal(Object.values(read(file)).filter(r=>r.settled).length,6);
@@ -116,4 +140,27 @@ const now=new Date('2026-10-12T14:00:00Z');
   assert.equal(fs.readFileSync(file,'utf8'),before);assert.deepEqual(fs.readdirSync(path.dirname(file)).filter(n=>n.includes('.tmp-')),[]);
   fs.rmSync(root,{recursive:true});
 }
-console.log('Verification time budget OK: partial progress saved, rest pending and untouched, next run continues without double settlement, per-race fetch failure and unverifiable pages stay pending, refunds still excluded, saved purchases unchanged, hanging fetch cut off, pay page failure fatal, atomic write');
+// 9) Not enough time left for the day's pay page: the date waits for the next run (no fetch, no write, no error).
+{
+  const {root,file}=makeRoot(),before=fs.readFileSync(file,'utf8');
+  const out=await recover({root,now,verifyBudgetMs:'30000',clock:()=>0,fetchPage:async()=>{throw Error('should not fetch the pay page')},fetchIndividual:async()=>{throw Error('should not fetch')}});
+  assert.equal(out.deferredDates,1);assert.equal(out.settled,0);assert.equal(fs.readFileSync(file,'utf8'),before);
+  // The pay page timeout never exceeds the time left.
+  let asked;await recover({root,now,verifyBudgetMs:'40000',clock:()=>0,fetchPage:async(d,{timeoutMs})=>{asked=timeoutMs;return payHtml(races)},fetchIndividual:async req=>individual(Number(req.race))});
+  assert.equal(asked,30000);
+  fs.rmSync(root,{recursive:true});
+}
+// 10) Recovery: the first races fail slowly every run; rotation lets the rest settle over a few runs, no double settlement.
+{
+  const {root,file}=makeRoot();const slow=new Set(['1','2']);const first={};
+  for(let i=0;i<10;i++){
+    let t=i*60*60000;
+    await recover({root,now,verifyBudgetMs:'55500',clock:()=>t,fetchPage:async()=>payHtml(races),fetchIndividual:async req=>{t+=30000;if(slow.has(req.race))throw Error('slow failure');return individual(Number(req.race));}});
+    for(const r of Object.values(read(file)))if(r.settled){first[r.race]??=r.modes.hit.payout;assert.equal(r.modes.hit.payout,first[r.race]);}
+  }
+  const after=Object.values(read(file));
+  assert.deepEqual(after.filter(r=>r.settled).map(r=>r.race).sort(),['3','4','5','6']);
+  assert.ok(after.filter(r=>slow.has(r.race)).every(r=>!r.settled&&!r.excluded&&!r.hit));
+  fs.rmSync(root,{recursive:true});
+}
+console.log('Verification time budget OK: partial progress saved, rest pending and untouched, next run continues without double settlement, per-race fetch failure and unverifiable pages stay pending, refunds still excluded, saved purchases unchanged, hanging fetch cut off, pay page failure fatal, atomic write, safe budget parsing, worst-case overrun bounded, pay page deferred when out of time, rotation past slow failures');
