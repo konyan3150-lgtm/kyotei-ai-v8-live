@@ -4,6 +4,8 @@
 // With a budget, races verified so far are saved through the normal checks and atomic write, and the rest
 // stay pending (never treated as a miss) for the next run.
 export const MAX_FETCH_TIMEOUT_MS=15000,MIN_FETCH_TIMEOUT_MS=1000,RETRY_DELAY_MS=250,FETCH_ATTEMPTS=2;
+// Smallest remaining time that can hold every attempt at the minimum timeout plus the retry waits.
+export const MIN_START_MS=FETCH_ATTEMPTS*MIN_FETCH_TIMEOUT_MS+(FETCH_ATTEMPTS-1)*RETRY_DELAY_MS;
 
 // Explicit "unlimited" is the only way to disable the budget. Missing values use the default;
 // a wrong value (0, negative, not a number) also falls back to the default instead of becoming unlimited.
@@ -36,10 +38,10 @@ export function verifyBudget({budgetMs,defaultMs=300000,clock=()=>Date.now()}={}
   let deferred=0,attempts=0;const outcomes={};
   const remainingMs=()=>limit-(clock()-start);
   return {
-    // Checked before each new fetch; a fetch is only started with at least the minimum timeout left.
-    allow(){if(remainingMs()>=MIN_FETCH_TIMEOUT_MS){attempts++;return true;}deferred++;return false;},
-    // Per-attempt timeout: two attempts plus the retry delay stay within the remaining time (+1.25 s at most).
-    fetchTimeoutMs(){const r=remainingMs();return Number.isFinite(r)?Math.max(MIN_FETCH_TIMEOUT_MS,Math.min(MAX_FETCH_TIMEOUT_MS,Math.floor(r/FETCH_ATTEMPTS))):MAX_FETCH_TIMEOUT_MS;},
+    // Checked before each new fetch; a fetch is only started when all of its attempts fit in the time left.
+    allow(){if(remainingMs()>=MIN_START_MS){attempts++;return true;}deferred++;return false;},
+    // Per-attempt timeout: all attempts plus the retry waits end within the remaining time (checked by allow()).
+    fetchTimeoutMs(){const r=remainingMs();return Number.isFinite(r)?Math.max(MIN_FETCH_TIMEOUT_MS,Math.min(MAX_FETCH_TIMEOUT_MS,Math.floor((r-(FETCH_ATTEMPTS-1)*RETRY_DELAY_MS)/FETCH_ATTEMPTS))):MAX_FETCH_TIMEOUT_MS;},
     note(kind){outcomes[kind]=(outcomes[kind]||0)+1;},
     remainingMs,
     summary(){return {limit_ms:Number.isFinite(limit)?limit:null,limit_source:parsed.source,elapsed_ms:clock()-start,attempts,deferred_by_time_budget:deferred,outcomes:{...outcomes}};},

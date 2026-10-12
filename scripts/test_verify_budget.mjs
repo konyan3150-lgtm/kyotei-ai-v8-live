@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {verifyBudget,parseBudgetMs,rotate,FETCH_ATTEMPTS,RETRY_DELAY_MS,MIN_FETCH_TIMEOUT_MS} from './verify_budget.mjs';
+import {verifyBudget,parseBudgetMs,rotate,FETCH_ATTEMPTS,RETRY_DELAY_MS,MIN_FETCH_TIMEOUT_MS,MIN_START_MS} from './verify_budget.mjs';
 import {recover} from './settle_pending_results.mjs';
 import {parseOfficialPayPage} from './fetch_official_results.mjs';
 import {verifyIndividualResult} from './verified_outcome.mjs';
@@ -10,8 +10,10 @@ import {writeJsonBatch} from './history_store.mjs';
 
 // Budget helper: a fetch only starts with at least 1s left; per-attempt timeout fits the remaining time.
 {let t=0;const b=verifyBudget({budgetMs:20000,clock:()=>t});
- assert.equal(b.fetchTimeoutMs(),10000);assert.equal(b.allow(),true);t=12000;assert.equal(b.fetchTimeoutMs(),4000);
- t=18500;assert.equal(b.fetchTimeoutMs(),1000);assert.equal(b.allow(),true);t=19001;assert.equal(b.allow(),false);assert.equal(b.allow(),false);
+ assert.equal(MIN_START_MS,2250);
+ assert.equal(b.fetchTimeoutMs(),9875);assert.equal(b.allow(),true);t=12000;assert.equal(b.fetchTimeoutMs(),3875);
+ t=17750;assert.equal(b.fetchTimeoutMs(),1000);assert.equal(b.allow(),true);   // 2250 left: 1000+250+1000 fits exactly
+ t=18500;assert.equal(b.allow(),false);t=19001;assert.equal(b.allow(),false);   // 1500 left: two attempts cannot fit
  b.note('settled');b.note('settled');b.note('pending:payout_pending');
  assert.deepEqual(b.summary(),{limit_ms:20000,limit_source:'configured',elapsed_ms:19001,attempts:2,deferred_by_time_budget:2,outcomes:{settled:2,'pending:payout_pending':1}});}
 // Configuration: missing -> default; explicit "unlimited" -> no limit; wrong values -> default (never unlimited by mistake).
@@ -25,12 +27,15 @@ assert.throws(()=>parseBudgetMs('1000',0));
 {const w=console.warn;console.warn=()=>{};try{const b=verifyBudget({budgetMs:'-1',defaultMs:480000});assert.equal(b.limitMs,480000);assert.equal(b.summary().limit_source,'invalid_fallback');}finally{console.warn=w}}
 {const b=verifyBudget({budgetMs:'unlimited'});for(let i=0;i<1000;i++)assert.equal(b.allow(),true);assert.equal(b.fetchTimeoutMs(),15000);assert.equal(b.summary().limit_ms,null);}
 {const b=verifyBudget({});assert.equal(b.limitMs,300000);}
-// Worst case: every started fetch times out on both attempts. Total time stays within the budget + 1.25s.
-for(const limit of [1000,1500,2000,5000,29999,30000,61234,300000,480000]){
+// Worst case: every started fetch times out on every attempt. Total time never exceeds the budget.
+for(const limit of [1000,1500,2000,2249,2250,2251,5000,29999,30000,61234,300000,480000]){
   let t=0;const b=verifyBudget({budgetMs:limit,clock:()=>t});
-  while(b.allow())t+=FETCH_ATTEMPTS*b.fetchTimeoutMs()+RETRY_DELAY_MS;
-  assert.ok(t<=limit+MIN_FETCH_TIMEOUT_MS+RETRY_DELAY_MS,`limit ${limit}: ${t}`);
+  while(b.allow())t+=FETCH_ATTEMPTS*b.fetchTimeoutMs()+(FETCH_ATTEMPTS-1)*RETRY_DELAY_MS;
+  assert.ok(t<=limit,`limit ${limit}: ${t}`);
 }
+// The same holds with a jittery clock between checks (time also passes outside fetches).
+for(let seed=1;seed<200;seed++){let t=0,x=seed;const b=verifyBudget({budgetMs:10000+seed*137,clock:()=>t});
+  while(true){x=(x*1103515245+12345)%2147483648;t+=x%700;if(!b.allow())break;t+=FETCH_ATTEMPTS*b.fetchTimeoutMs()+(FETCH_ATTEMPTS-1)*RETRY_DELAY_MS;assert.ok(t<=10000+seed*137,`seed ${seed}`);}}
 // Rotation keeps every item, changes the head between runs.
 assert.deepEqual(rotate([],3),[]);
 for(const n of [1,2,6,10,12,60,97]){const list=[...Array(n).keys()];
@@ -163,4 +168,4 @@ const now=new Date('2026-10-12T14:00:00Z');
   assert.ok(after.filter(r=>slow.has(r.race)).every(r=>!r.settled&&!r.excluded&&!r.hit));
   fs.rmSync(root,{recursive:true});
 }
-console.log('Verification time budget OK: partial progress saved, rest pending and untouched, next run continues without double settlement, per-race fetch failure and unverifiable pages stay pending, refunds still excluded, saved purchases unchanged, hanging fetch cut off, pay page failure fatal, atomic write, safe budget parsing, worst-case overrun bounded, pay page deferred when out of time, rotation past slow failures');
+console.log('Verification time budget OK: partial progress saved, rest pending and untouched, next run continues without double settlement, per-race fetch failure and unverifiable pages stay pending, refunds still excluded, saved purchases unchanged, hanging fetch cut off, pay page failure fatal, atomic write, safe budget parsing, worst-case time never exceeds the budget, pay page deferred when out of time, rotation past slow failures');
