@@ -1,5 +1,5 @@
 import {verifyIndividualResult} from './verified_outcome.mjs';
-import {verifyBudget} from './verify_budget.mjs';
+import {verifyBudget,rotate} from './verify_budget.mjs';
 import {applyResults} from './settlement.mjs';
 export {applyResults} from './settlement.mjs';
 import {loadHistory,writeJsonBatch} from './history_store.mjs';
@@ -9,10 +9,12 @@ import {fileURLToPath} from 'node:url';
 import {parseOfficialPayPage} from './fetch_official_results.mjs';
 import {summarizeExperts} from './update_server_predictions.mjs';
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+// The day's pay page is only requested with this much budget left, so it never runs past the budget.
+const PAGE_TIMEOUT_MS=30000,PAGE_MIN_REMAINING_MS=35000;
 const day=now=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now).replaceAll('-','');
 
-export async function recover({root=ROOT,now=new Date(),fetchIndividual,verifyBudgetMs=Number(process.env.VERIFY_BUDGET_MS||480000),clock=()=>Date.now(),fetchPage=async date=>{
-  const res=await fetch(`https://www.boatrace.jp/owpc/pc/race/pay?hd=${date}`,{headers:{'user-agent':'kyotei-v8-results-recovery/1.0'},signal:AbortSignal.timeout(30000)});
+export async function recover({root=ROOT,now=new Date(),fetchIndividual,verifyBudgetMs=process.env.VERIFY_BUDGET_MS,clock=()=>Date.now(),fetchPage=async(date,{timeoutMs=PAGE_TIMEOUT_MS}={})=>{
+  const res=await fetch(`https://www.boatrace.jp/owpc/pc/race/pay?hd=${date}`,{headers:{'user-agent':'kyotei-v8-results-recovery/1.0'},signal:AbortSignal.timeout(timeoutMs)});
   if(!res.ok)throw Error(`official pay HTTP ${res.status}`);
   return res.text();
 }}={}){
@@ -21,13 +23,15 @@ export async function recover({root=ROOT,now=new Date(),fetchIndividual,verifyBu
   const stores=[{file:hotFile,data:hot},...archives],all=stores.flatMap(x=>Object.values(x.data.records||{}));
   const dates=[...new Set(all.filter(x=>!x.settled&&!x.excluded&&(!x.cancelled||x.cancellation_source==='inferred')&&/^\d{8}$/.test(x.date)&&x.date<=day(now)).map(x=>x.date))].sort();
   let settled=0,cancelled=0,excluded=0;const changed=new Set(),errors=[];
-  const budget=verifyBudget({budgetMs:verifyBudgetMs,clock});
+  const budget=verifyBudget({budgetMs:verifyBudgetMs,defaultMs:480000,clock});let deferredDates=0;
   let fetchFailures=0;
   for(const date of dates){
     try{
-      const payload=parseOfficialPayPage(await fetchPage(date),date);
+      // Out of time before this date's pay page: leave the whole date pending for the next run (oldest dates go first).
+      if(budget.remainingMs()<PAGE_MIN_REMAINING_MS){deferredDates++;continue;}
+      const payload=parseOfficialPayPage(await fetchPage(date,{timeoutMs:Math.min(PAGE_TIMEOUT_MS,budget.remainingMs()-5000)}),date);
       const requests=new Map(all.filter(rec=>rec.date===date&&!rec.settled&&!rec.excluded&&(!rec.cancelled||rec.cancellation_source==='inferred')).map(rec=>[`${Number(rec.stadium)}-${Number(rec.race)}`,rec]));
-      for(const rec of requests.values()){
+      for(const rec of rotate([...requests.values()],clock())){
         const sid=String(Number(rec.stadium)),race=String(Number(rec.race)),published=payload.races?.[sid]?.[race];
         if(!published||published.cancelled)continue;
         // Out of time: drop the unverified published result so it is never applied; it stays pending for the next run.
@@ -49,7 +53,7 @@ export async function recover({root=ROOT,now=new Date(),fetchIndividual,verifyBu
     writeJsonBatch([...stores.filter(store=>changed.has(store.file)).map(store=>[store.file,store.data]),[indexFile,index]]);
   }
   const pending=all.filter(x=>!x.settled&&!x.cancelled&&!x.excluded).length;
-  console.log(JSON.stringify({dates,settled,cancelled,excluded,pending,fetch_failures:fetchFailures,errors,official_verification:budget.summary()}));
-  return{settled,cancelled,excluded,pending,deferred:budget.deferred,fetchFailures};
+  console.log(JSON.stringify({dates,settled,cancelled,excluded,pending,fetch_failures:fetchFailures,errors,deferred_dates:deferredDates,official_verification:budget.summary()}));
+  return{settled,cancelled,excluded,pending,deferred:budget.deferred,deferredDates,fetchFailures,verification:budget.summary()};
 }
 if(import.meta.url===`file://${process.argv[1]}`)await recover();
