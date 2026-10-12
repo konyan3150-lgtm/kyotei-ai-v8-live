@@ -2,6 +2,7 @@ name: Confidence concentration validation
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - ".github/workflows/confidence-concentration-validation.yml"
       - "scripts/validate_confidence_concentration.mjs"
@@ -9,6 +10,8 @@ permissions:
   contents: write
 jobs:
   validate:
+    # Production data is written only from main (never from an unmerged branch, also for manual runs).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
