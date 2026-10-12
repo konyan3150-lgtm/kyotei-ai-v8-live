@@ -2,6 +2,7 @@ name: Update daily course statistics
 
 on:
   push:
+    branches: [main]
     paths:
       - "scripts/fetch_course_stats.py"
       - ".github/workflows/update-course-stats.yml"
@@ -19,6 +20,8 @@ concurrency:
 
 jobs:
   update:
+    # Production data is written only from main (never from an unmerged branch, also for manual runs).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

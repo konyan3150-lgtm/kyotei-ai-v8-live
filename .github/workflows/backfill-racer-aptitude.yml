@@ -12,6 +12,7 @@ on:
         required: true
         default: "20260924"
   push:
+    branches: [main]
     paths:
       - "scripts/backfill_racer_aptitude.mjs"
       - ".github/workflows/backfill-racer-aptitude.yml"
@@ -25,6 +26,8 @@ concurrency:
 
 jobs:
   backfill:
+    # Production data is written only from main (never from an unmerged branch, also for manual runs).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

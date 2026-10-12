@@ -16,6 +16,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   recover:
+    # Production data is written only from main (never from an unmerged branch, also for manual runs).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

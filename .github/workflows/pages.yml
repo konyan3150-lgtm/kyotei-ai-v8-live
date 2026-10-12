@@ -18,7 +18,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    # Deploy only main: manual runs from other branches and workflow_run from branch runs are skipped.
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')) }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
