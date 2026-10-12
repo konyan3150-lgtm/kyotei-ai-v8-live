@@ -1,4 +1,5 @@
 import {verifyIndividualResult} from './verified_outcome.mjs';
+import {verifyBudget} from './verify_budget.mjs';
 import {applyResults} from './settlement.mjs';
 export {applyResults} from './settlement.mjs';
 import {loadHistory,writeJsonBatch} from './history_store.mjs';
@@ -10,7 +11,7 @@ import {summarizeExperts} from './update_server_predictions.mjs';
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const day=now=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now).replaceAll('-','');
 
-export async function recover({root=ROOT,now=new Date(),fetchIndividual,fetchPage=async date=>{
+export async function recover({root=ROOT,now=new Date(),fetchIndividual,verifyBudgetMs=Number(process.env.VERIFY_BUDGET_MS||480000),clock=()=>Date.now(),fetchPage=async date=>{
   const res=await fetch(`https://www.boatrace.jp/owpc/pc/race/pay?hd=${date}`,{headers:{'user-agent':'kyotei-v8-results-recovery/1.0'},signal:AbortSignal.timeout(30000)});
   if(!res.ok)throw Error(`official pay HTTP ${res.status}`);
   return res.text();
@@ -20,6 +21,8 @@ export async function recover({root=ROOT,now=new Date(),fetchIndividual,fetchPag
   const stores=[{file:hotFile,data:hot},...archives],all=stores.flatMap(x=>Object.values(x.data.records||{}));
   const dates=[...new Set(all.filter(x=>!x.settled&&!x.excluded&&(!x.cancelled||x.cancellation_source==='inferred')&&/^\d{8}$/.test(x.date)&&x.date<=day(now)).map(x=>x.date))].sort();
   let settled=0,cancelled=0,excluded=0;const changed=new Set(),errors=[];
+  const budget=verifyBudget({budgetMs:verifyBudgetMs,clock});
+  let fetchFailures=0;
   for(const date of dates){
     try{
       const payload=parseOfficialPayPage(await fetchPage(date),date);
@@ -27,7 +30,12 @@ export async function recover({root=ROOT,now=new Date(),fetchIndividual,fetchPag
       for(const rec of requests.values()){
         const sid=String(Number(rec.stadium)),race=String(Number(rec.race)),published=payload.races?.[sid]?.[race];
         if(!published||published.cancelled)continue;
-        payload.races[sid][race]=await verifyIndividualResult({date,stadium:sid,race},published,{fetchIndividual});
+        // Out of time: drop the unverified published result so it is never applied; it stays pending for the next run.
+        if(!budget.allow()){delete payload.races[sid][race];continue;}
+        // A failed per-race fetch keeps only that race pending instead of discarding every verified race.
+        try{const checked=await verifyIndividualResult({date,stadium:sid,race},published,{fetchIndividual,timeoutMs:budget.fetchTimeoutMs()});payload.races[sid][race]=checked;
+          budget.note(checked.excluded?'excluded':checked.pending?'pending:'+(checked.reason||'unverified'):'verified');}
+        catch(e){delete payload.races[sid][race];fetchFailures++;budget.note('fetch_failed');console.warn(`Official result fetch held pending ${date}/${sid}/${race}: ${e.message}`);}
       }
       for(const store of stores){const counts=applyResults(store.data.records,payload);settled+=counts.settled;cancelled+=counts.cancelled;excluded+=counts.excluded;if(counts.settled+counts.cancelled+counts.excluded)changed.add(store.file)}
     }catch(e){errors.push(`${date}: ${e.message}`)}
@@ -41,7 +49,7 @@ export async function recover({root=ROOT,now=new Date(),fetchIndividual,fetchPag
     writeJsonBatch([...stores.filter(store=>changed.has(store.file)).map(store=>[store.file,store.data]),[indexFile,index]]);
   }
   const pending=all.filter(x=>!x.settled&&!x.cancelled&&!x.excluded).length;
-  console.log(JSON.stringify({dates,settled,cancelled,excluded,pending,errors}));
-  return{settled,cancelled,excluded,pending};
+  console.log(JSON.stringify({dates,settled,cancelled,excluded,pending,fetch_failures:fetchFailures,errors,official_verification:budget.summary()}));
+  return{settled,cancelled,excluded,pending,deferred:budget.deferred,fetchFailures};
 }
 if(import.meta.url===`file://${process.argv[1]}`)await recover();
