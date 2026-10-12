@@ -33,8 +33,9 @@ export async function recover({root=ROOT,now=new Date(),fetchIndividual,verifyBu
         // Out of time: drop the unverified published result so it is never applied; it stays pending for the next run.
         if(!budget.allow()){delete payload.races[sid][race];continue;}
         // A failed per-race fetch keeps only that race pending instead of discarding every verified race.
-        try{payload.races[sid][race]=await verifyIndividualResult({date,stadium:sid,race},published,{fetchIndividual});}
-        catch(e){delete payload.races[sid][race];fetchFailures++;console.warn(`Official result fetch held pending ${date}/${sid}/${race}: ${e.message}`);}
+        try{const checked=await verifyIndividualResult({date,stadium:sid,race},published,{fetchIndividual,timeoutMs:budget.fetchTimeoutMs()});payload.races[sid][race]=checked;
+          budget.note(checked.excluded?'excluded':checked.pending?'pending:'+(checked.reason||'unverified'):'verified');}
+        catch(e){delete payload.races[sid][race];fetchFailures++;budget.note('fetch_failed');console.warn(`Official result fetch held pending ${date}/${sid}/${race}: ${e.message}`);}
       }
       for(const store of stores){const counts=applyResults(store.data.records,payload);settled+=counts.settled;cancelled+=counts.cancelled;excluded+=counts.excluded;if(counts.settled+counts.cancelled+counts.excluded)changed.add(store.file)}
     }catch(e){errors.push(`${date}: ${e.message}`)}
@@ -48,7 +49,7 @@ export async function recover({root=ROOT,now=new Date(),fetchIndividual,verifyBu
     writeJsonBatch([...stores.filter(store=>changed.has(store.file)).map(store=>[store.file,store.data]),[indexFile,index]]);
   }
   const pending=all.filter(x=>!x.settled&&!x.cancelled&&!x.excluded).length;
-  console.log(JSON.stringify({dates,settled,cancelled,excluded,pending,deferred_by_time_budget:budget.deferred,fetch_failures:fetchFailures,errors}));
+  console.log(JSON.stringify({dates,settled,cancelled,excluded,pending,fetch_failures:fetchFailures,errors,official_verification:budget.summary()}));
   return{settled,cancelled,excluded,pending,deferred:budget.deferred,fetchFailures};
 }
 if(import.meta.url===`file://${process.argv[1]}`)await recover();
