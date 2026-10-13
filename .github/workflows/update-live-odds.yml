@@ -19,6 +19,7 @@ on:
       - "scripts/update_server_predictions.mjs"
       - "scripts/update_cycle.sh"
       - "scripts/update_loop.mjs"
+      - "scripts/carry_preclose_saves.mjs"
       - ".github/workflows/update-live-odds.yml"
 
 permissions:
@@ -58,10 +59,14 @@ jobs:
       - name: Test update loop and cycle (no production writes if these fail)
         run: |
           node scripts/test_update_loop.mjs
+          node scripts/test_carry_preclose_saves.mjs
           node scripts/test_update_cycle.mjs
       - name: Update odds, predictions and results every 3 minutes
         # Each cycle: sync to origin/main, history baseline, odds, official results/previews, runtime data,
         # save predictions and settle, Expert backfill, history verification, commit and push.
+        # Data scripts changed on main are used from the next cycle. The loop itself, this workflow and the
+        # composer dependencies are fixed for the run: if they change on main, the loop stops and the pending
+        # run starts again with them.
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/update_loop.mjs

@@ -37,5 +37,21 @@ assert.equal(inRacingHours(jst(6,59)),false);assert.equal(inRacingHours(jst(7,0)
  assert.equal(r.timedOut,true);assert.ok(Date.now()-t0<5000);
  const ok=await runCommand('bash',['-c','exit 0']);assert.deepEqual([ok.code,ok.timedOut],[0,false]);
  const bad=await runCommand('bash',['-c','exit 3']);assert.equal(bad.code,3);}
+// 10) A rejected push is retried right away (up to 2 times), then the normal 3-minute cadence resumes.
+{let n=0;const s=sim({startMs:jst(9),outcome:()=>(++n<=4?{ok:false,retryNow:true,error:'push rejected'}:{ok:true,pushed:true})});
+ const r=await s.run;assert.equal(s.starts[1]-s.ends[0],0);assert.equal(s.starts[2]-s.ends[1],0);   // two immediate retries
+ assert.equal(s.starts[3],s.starts[2]+3*MIN);assert.equal(s.starts[4],s.ends[3]);assert.ok(r.ok);}
+// 11) Control code changed on main (loop, workflow, dependencies): stop so the pending run restarts with it.
+{const s=sim({startMs:jst(9),outcome:c=>c===3?{ok:true,pushed:true,stop:'control_code_changed:scripts/update_loop.mjs'}:{ok:true,pushed:true}});
+ const r=await s.run;assert.equal(r.cycles,3);assert.equal(r.reason,'control_code_changed:scripts/update_loop.mjs');assert.ok(r.ok);}
+// 12) The parent exits on SIGTERM but a child ignores it: runCommand returns only after the child is gone too.
+{const fs=await import('node:fs'),os=await import('node:os'),p=await import('node:path');const pidFile=p.join(fs.mkdtempSync(p.join(os.tmpdir(),'v8-loop-')),'child.pid');
+ const r=await runCommand('bash',['-c',`(trap "" TERM; exec sleep 60) & echo $! > ${pidFile}; sleep 60`],{timeoutMs:300,graceMs:300});
+ const pid=Number(fs.readFileSync(pidFile,'utf8'));let alive=true;try{process.kill(pid,0);}catch{alive=false;}
+ assert.equal(r.timedOut,true);assert.equal(alive,false,'child still running after runCommand returned');
+ // A background child left behind by a normally finished command is also stopped before returning.
+ const r2=await runCommand('bash',['-c',`(trap "" TERM; exec sleep 60) & echo $! > ${pidFile}; exit 0`],{graceMs:300});
+ const pid2=Number(fs.readFileSync(pidFile,'utf8'));let alive2=true;try{process.kill(pid2,0);}catch{alive2=false;}
+ assert.equal(r2.code,0);assert.equal(alive2,false);}
 assert.ok(Object.isFrozen(LOOP));assert.ok(LOOP.maxRunMs+LOOP.cycleTimeoutMs<=350*MIN);
-console.log('update loop OK: 3-minute cadence, 5.5 h bound, racing-hours stop, single night cycle, failure streak stop, slow and timed-out cycles bounded, Pages dispatch only after a push, process-group timeout');
+console.log('update loop OK: 3-minute cadence, 5.5 h bound, racing-hours stop, single night cycle, failure streak stop, slow and timed-out cycles bounded, Pages dispatch only after a push, process-group timeout, immediate retry after a rejected push, stop on control code change, no surviving child after return');
