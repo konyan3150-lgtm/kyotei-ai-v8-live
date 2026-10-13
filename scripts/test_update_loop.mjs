@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import {runLoop,inRacingHours,runCommand,LOOP} from './update_loop.mjs';
 
 const MIN=60000,jst=(h,m=0)=>Date.UTC(2026,9,13,h-9,m);   // JST wall time on 2026-10-13
-function sim({startMs,cycleMs=()=>MIN,outcome=()=>({ok:true,pushed:true}),pagesFail=false}){
+function sim({startMs,cycleMs=()=>MIN,outcome=()=>({ok:true,pushed:true}),pagesFail=false,journalPending}){
   let t=startMs;const starts=[],ends=[],logs=[];let pages=0;
   return {run:runLoop({now:()=>t,sleep:async ms=>{assert.ok(ms>0);t+=ms;},log:m=>logs.push(m),
     runCycle:async({timeoutMs,cycle})=>{starts.push(t);const d=Math.min(cycleMs(cycle),timeoutMs);t+=d;ends.push(t);const o=outcome(cycle);if(o instanceof Error)throw o;return d>=timeoutMs?{ok:false,error:'cycle timed out'}:o;},
-    dispatchPages:async()=>{pages++;if(pagesFail)throw Error('dispatch down');}}),starts,ends,logs,get pages(){return pages}};
+    dispatchPages:async()=>{pages++;if(pagesFail)throw Error('dispatch down');},...(journalPending?{journalPending}:{})}),starts,ends,logs,get pages(){return pages}};
 }
 assert.equal(inRacingHours(jst(6,59)),false);assert.equal(inRacingHours(jst(7,0)),true);assert.equal(inRacingHours(jst(21,59)),true);assert.equal(inRacingHours(jst(22,0)),false);
 
@@ -53,5 +53,15 @@ assert.equal(inRacingHours(jst(6,59)),false);assert.equal(inRacingHours(jst(7,0)
  const r2=await runCommand('bash',['-c',`(trap "" TERM; exec sleep 60) & echo $! > ${pidFile}; exit 0`],{graceMs:300});
  const pid2=Number(fs.readFileSync(pidFile,'utf8'));let alive2=true;try{process.kill(pid2,0);}catch{alive2=false;}
  assert.equal(r2.code,0);assert.equal(alive2,false);}
-assert.ok(Object.isFrozen(LOOP));assert.ok(LOOP.maxRunMs+LOOP.cycleTimeoutMs<=350*MIN);
-console.log('update loop OK: 3-minute cadence, 5.5 h bound, racing-hours stop, single night cycle, failure streak stop, slow and timed-out cycles bounded, Pages dispatch only after a push, process-group timeout, immediate retry after a rejected push, stop on control code change, no surviving child after return');
+// 13) Push rejected on the very last cycle: one more cycle runs right away to flush the journal (within the job limit).
+{let pending=false;const s=sim({startMs:jst(7),cycleMs:()=>11*MIN,outcome:c=>{if(c===29){pending=true;return {ok:false,retryNow:true,error:'push rejected'};}if(c===30)pending=false;return {ok:true,pushed:true};},journalPending:async()=>pending});
+ const r=await s.run;assert.equal(r.reason,'run_time_limit');assert.equal(r.cycles,30);assert.ok(r.ok);assert.equal(r.journal_pending,false);
+ assert.equal(s.starts[29],s.ends[28]);assert.ok(Math.max(...s.ends)-jst(7)<=LOOP.maxRunMs+LOOP.cycleTimeoutMs);}
+// 14) Journal still pending after the flush (e.g. stopped for racing hours / control change / failures): the run fails, not quietly.
+for(const opts of [{startMs:jst(21,55)},{startMs:jst(9),outcome:c=>c===2?{ok:true,pushed:true,stop:'control_code_changed:x'}:{ok:true,pushed:true}},{startMs:jst(9),outcome:()=>({ok:false,error:'x'})}]){
+  const s=sim({...opts,journalPending:async()=>true});const r=await s.run;
+  assert.equal(r.ok,false);assert.equal(r.journal_pending,true);assert.ok(s.logs.some(m=>m.includes('still pending in the journal')));}
+// 15) No pending journal: no extra cycle.
+{const s=sim({startMs:jst(21,55),journalPending:async()=>false});const r=await s.run;assert.equal(r.cycles,2);assert.ok(r.ok);}
+assert.ok(Object.isFrozen(LOOP));assert.ok(LOOP.maxRunMs+LOOP.cycleTimeoutMs<=345*MIN);   // regular cycles end by maxRunMs; one journal flush cycle still ends before the 350-min job limit (cache save after)
+console.log('update loop OK: 3-minute cadence, 5.5 h bound, racing-hours stop, single night cycle, failure streak stop, slow and timed-out cycles bounded, Pages dispatch only after a push, process-group timeout, immediate retry after a rejected push, stop on control code change, no surviving child after return, journal flush before ending and failure if it stays pending');

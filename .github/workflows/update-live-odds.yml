@@ -56,6 +56,13 @@ jobs:
           COMPOSER: scripts/odds-composer.json
           COMPOSER_VENDOR_DIR: scripts/vendor
         run: composer install --no-dev --prefer-dist --no-progress --no-interaction
+      # Pre-close purchase journal: purchases not yet held by origin survive into the next runner.
+      - name: Restore pre-close purchase journal
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/v8-journal
+          key: preclose-journal-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: preclose-journal-
       - name: Test update loop and cycle (no production writes if these fail)
         run: |
           node scripts/test_update_loop.mjs
@@ -69,4 +76,14 @@ jobs:
         # run starts again with them.
         env:
           GH_TOKEN: ${{ github.token }}
+          CYCLE_CARRY_FILE: ${{ runner.temp }}/v8-journal/preclose-journal.json
         run: node scripts/update_loop.mjs
+      - name: Keep the journal file for the cache
+        if: always()
+        run: node scripts/carry_preclose_saves.mjs init dev "${{ runner.temp }}/v8-journal/preclose-journal.json"
+      - name: Save pre-close purchase journal (also after failure, cancellation or timeout)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/v8-journal
+          key: preclose-journal-${{ github.run_id }}-${{ github.run_attempt }}

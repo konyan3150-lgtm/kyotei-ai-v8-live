@@ -14,7 +14,7 @@ const readOrigin=f=>JSON.parse(git(origin,'show',`main:${f}`));
 try{
   execFileSync('git',['init','-q','--bare','-b','main',origin]);
   fs.mkdirSync(path.join(work,'scripts'),{recursive:true});fs.mkdirSync(path.join(work,'dev'));fs.mkdirSync(bin);
-  for(const f of ['update_cycle.sh','carry_preclose_saves.mjs','history_store.mjs','verify_prediction_history.mjs'])fs.copyFileSync(path.join(here,f),path.join(work,'scripts',f));
+  for(const f of ['update_cycle.sh','carry_preclose_saves.mjs','history_store.mjs','verify_prediction_history.mjs','settlement.mjs'])fs.copyFileSync(path.join(here,f),path.join(work,'scripts',f));
   // Stub model step. PRECLOSE_KEY: save a new pre-close prediction record (only possible before close).
   // NEW_ARCHIVE: write a new month archive file (index not updated yet). Otherwise: change dev/odds.json.
   fs.writeFileSync(path.join(work,'scripts/update_server_predictions.mjs'),`
@@ -32,7 +32,8 @@ else if(!env.NO_CHANGE)fs.appendFileSync('dev/odds.json','x\\n');`);
   fs.mkdirSync(path.join(work,'scripts/vendor'));fs.writeFileSync(path.join(work,'scripts/vendor/keep.txt'),'composer cache');   // untracked, must survive
   git(work,'init','-q','-b','main');git(work,'add','--','.',':!scripts/vendor');git(work,'commit','-qm','init');git(work,'remote','add','origin',origin);git(work,'push','-q','origin','main');
   execFileSync('git',['clone','-q',origin,other],{stdio:'ignore'});
-  const mark=path.join(tmp,'pushed'),carry=path.join(tmp,'carry.json');
+  const mark=path.join(tmp,'pushed'),carry=path.join(tmp,'journal','preclose-journal.json');
+  const pending=()=>fs.existsSync(carry)?Object.keys(JSON.parse(fs.readFileSync(carry,'utf8')).entries).length:0;
   const cycle=(env={})=>spawnSync('bash',['scripts/update_cycle.sh'],{cwd:work,encoding:'utf8',env:{...gitEnv,PATH:`${bin}:${process.env.PATH}`,RUNNER_TEMP:tmp,CYCLE_PUSHED_MARK:mark,CYCLE_CARRY_FILE:carry,...env}});
   const otherPush=(file,content,msg)=>{git(other,'pull','-q','origin','main');fs.writeFileSync(path.join(other,file),content);git(other,'commit','-qam',msg);git(other,'push','-q','origin','main');};
   const hook=path.join(origin,'hooks','pre-receive'),reject=on=>on?(fs.writeFileSync(hook,'#!/bin/sh\nexit 1\n'),fs.chmodSync(hook,0o755)):fs.rmSync(hook,{force:true});
@@ -50,10 +51,10 @@ else if(!env.NO_CHANGE)fs.appendFileSync('dev/odds.json','x\\n');`);
     modes:{hit:{picks:['1-2-3','1-3-2'],stake:200,settled:false,hit:false,payout:0}},picks:['1-2-3','1-3-2'],stake:200,settled:false,source:'server'};
   const KEY='kyotei_v8_dev_result_20261013_24_09';
   reject(true);const head=git(origin,'rev-parse','main');
-  r=cycle({PRECLOSE_KEY:KEY,PRECLOSE_RECORD:JSON.stringify(saved)});assert.equal(r.status,75,r.stderr);assert.equal(git(origin,'rev-parse','main'),head);assert.ok(fs.existsSync(carry));
+  r=cycle({PRECLOSE_KEY:KEY,PRECLOSE_RECORD:JSON.stringify(saved)});assert.equal(r.status,75,r.stderr);assert.equal(git(origin,'rev-parse','main'),head);assert.equal(pending(),1);
   reject(false);otherPush('odds.json','{"recovered":2}\n','Settle pending races again');
   r=cycle({NO_CHANGE:'1'});                     // after close: the model step can no longer create it
-  assert.equal(r.status,0,r.stderr);assert.ok(fs.existsSync(mark));assert.ok(!fs.existsSync(carry));
+  assert.equal(r.status,0,r.stderr);assert.ok(fs.existsSync(mark));assert.equal(pending(),0);
   assert.deepEqual(readOrigin(HOT).records[KEY],saved);assert.equal(readOrigin(HOT).record_count,1);
   assert.equal(git(origin,'show','main:odds.json'),'{"recovered":2}');   // the other workflow's change is kept too
 
@@ -62,7 +63,7 @@ else if(!env.NO_CHANGE)fs.appendFileSync('dev/odds.json','x\\n');`);
   reject(true);r=cycle({PRECLOSE_KEY:KEY2,PRECLOSE_RECORD:JSON.stringify(mine)});assert.equal(r.status,75);reject(false);
   git(other,'pull','-q','origin','main');{const h=JSON.parse(fs.readFileSync(path.join(other,HOT),'utf8'));h.records[KEY2]=theirs;h.record_count=Object.keys(h.records).length;fs.writeFileSync(path.join(other,HOT),JSON.stringify(h));}
   git(other,'commit','-qam','other save');git(other,'push','-q','origin','main');
-  r=cycle({NO_CHANGE:'1'});assert.equal(r.status,0,r.stderr);assert.match(r.stdout+r.stderr,/origin kept/);
+  r=cycle({NO_CHANGE:'1'});assert.equal(r.status,0,r.stderr);assert.match(r.stdout+r.stderr,/origin kept/);assert.equal(pending(),0);
   assert.deepEqual(readOrigin(HOT).records[KEY2],theirs);assert.deepEqual(readOrigin(HOT).records[KEY],saved);
 
   // 6) A failed cycle leaves an untracked new month archive: the next cycle removes it and the real history check passes.
@@ -74,5 +75,15 @@ else if(!env.NO_CHANGE)fs.appendFileSync('dev/odds.json','x\\n');`);
   const h2=git(origin,'rev-parse','main');r=cycle({FAIL_STEP:'update_server_predictions.mjs'});assert.notEqual(r.status,0);assert.equal(git(origin,'rev-parse','main'),h2);
   r=cycle({FAIL_STEP:'fetch_official_results.mjs'});assert.equal(r.status,0,r.stderr);assert.ok(fs.existsSync(mark));
   r=cycle({FAIL_STEP:'php'});assert.notEqual(r.status,0);
-  console.log('update cycle OK: pushes changes, skips no-ops, starts from latest origin, rejected pre-close save survives a close and is re-added exactly, origin wins on conflict, failed-cycle archive leftovers cleaned (vendor kept), failed steps never commit');
+
+  // 8) Rejected on the last cycle of a runner: the next runner (fresh checkout, journal restored from the cache) re-adds it.
+  const KEY3='kyotei_v8_dev_result_20261013_24_11',saved3={...saved,race:'11'};
+  reject(true);r=cycle({PRECLOSE_KEY:KEY3,PRECLOSE_RECORD:JSON.stringify(saved3)});assert.equal(r.status,75);reject(false);assert.equal(pending(),1);
+  const runner2=path.join(tmp,'runner2');execFileSync('git',['clone','-q','--depth=1',`file://${origin}`,runner2],{stdio:'ignore'});
+  for(const f of fs.readdirSync(path.join(work,'scripts')))if(f!=='vendor')fs.copyFileSync(path.join(work,'scripts',f),path.join(runner2,'scripts',f));
+  const restored=path.join(tmp,'runner2-journal','preclose-journal.json');fs.mkdirSync(path.dirname(restored));fs.copyFileSync(carry,restored);   // actions/cache restore
+  r=spawnSync('bash',['scripts/update_cycle.sh'],{cwd:runner2,encoding:'utf8',env:{...gitEnv,PATH:`${bin}:${process.env.PATH}`,RUNNER_TEMP:tmp,CYCLE_PUSHED_MARK:mark,CYCLE_CARRY_FILE:restored,NO_CHANGE:'1'}});
+  assert.equal(r.status,0,r.stderr);assert.deepEqual(readOrigin(HOT).records[KEY3],saved3);
+  assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(restored,'utf8')).entries),[]);
+  console.log('update cycle OK: pushes changes, skips no-ops, starts from latest origin, rejected pre-close save survives a close and is re-added exactly, origin wins on conflict, failed-cycle archive leftovers cleaned (vendor kept), failed steps never commit, journal restored on a new runner');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

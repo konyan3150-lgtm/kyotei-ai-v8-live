@@ -18,7 +18,7 @@ export function inRacingHours(ms,{startHourJst=LOOP.startHourJst,endHourJst=LOOP
   return h>=startHourJst&&h<endHourJst;
 }
 
-export async function runLoop({now=()=>Date.now(),sleep,runCycle,dispatchPages,log=console.log,limits=LOOP}){
+export async function runLoop({now=()=>Date.now(),sleep,runCycle,dispatchPages,journalPending=async()=>false,log=console.log,limits=LOOP}){
   const start=now();let cycles=0,succeeded=0,failures=0,streak=0,pushed=0,reason=null,immediate=0;
   while(true){
     const t=now();
@@ -45,9 +45,19 @@ export async function runLoop({now=()=>Date.now(),sleep,runCycle,dispatchPages,l
     const wait=t+limits.intervalMs-now();
     if(wait>0)await sleep(wait);
   }
-  const summary={cycles,succeeded,failures,pushed,reason,elapsed_ms:now()-start};
+  // Never end quietly with journaled pre-close purchases that origin does not hold yet: one more cycle right away
+  // (the job limit leaves room for it), and if they are still pending the run fails; the journal is saved for the next run.
+  let journalLeft=false;
+  if(await journalPending()){
+    cycles++;
+    let result;try{result=await runCycle({timeoutMs:limits.cycleTimeoutMs,cycle:cycles,flush:true});}catch(e){result={ok:false,error:String(e?.message||e)};}
+    if(result?.ok){succeeded++;if(result.pushed){pushed++;try{await dispatchPages();}catch(e){log(`::warning::Pages dispatch failed: ${e?.message||e}`);}}}else failures++;
+    journalLeft=await journalPending();
+    if(journalLeft)log('::error::pre-close purchases are still pending in the journal; it is saved for the next run');
+  }
+  const summary={cycles,succeeded,failures,pushed,reason,journal_pending:journalLeft,elapsed_ms:now()-start};
   log(JSON.stringify({update_loop:summary}));
-  return {...summary,ok:succeeded>0&&reason!=='too_many_consecutive_failures'};
+  return {...summary,ok:succeeded>0&&reason!=='too_many_consecutive_failures'&&!journalLeft};
 }
 
 const groupAlive=pgid=>{try{process.kill(-pgid,0);return true;}catch(e){return e.code==='EPERM';}};
@@ -72,6 +82,7 @@ export function runCommand(cmd,args,{timeoutMs,env,graceMs=10000}={}){
 
 if(import.meta.url===`file://${process.argv[1]}`){
   const root=path.resolve(import.meta.dirname,'..'),mark=path.join(process.env.RUNNER_TEMP||'/tmp','cycle-pushed');
+  const journal=process.env.CYCLE_CARRY_FILE||path.join(process.env.RUNNER_TEMP||'/tmp','v8-journal','preclose-journal.json');
   const fs=await import('node:fs'),crypto=await import('node:crypto');
   // The running loop and the installed dependencies are fixed at start; cycles reset to origin/main, so if these
   // change there, stop and let the next (pending) run start with them.
@@ -83,12 +94,13 @@ if(import.meta.url===`file://${process.argv[1]}`){
     runCycle:async({timeoutMs,cycle})=>{
       console.log(`::group::update cycle ${cycle} (${new Date().toISOString()})`);
       try{fs.rmSync(mark,{force:true});}catch{}
-      const r=await runCommand('bash',[path.join(root,'scripts/update_cycle.sh')],{timeoutMs,env:{CYCLE_PUSHED_MARK:mark}});
+      const r=await runCommand('bash',[path.join(root,'scripts/update_cycle.sh')],{timeoutMs,env:{CYCLE_PUSHED_MARK:mark,CYCLE_CARRY_FILE:journal}});
       console.log('::endgroup::');
       const changed=CONTROL.find(f=>controlHash(f)!==controlAtStart[f]);
       return {ok:r.code===0&&!r.timedOut,pushed:r.code===0&&fs.existsSync(mark),retryNow:r.code===75&&!r.timedOut,
         stop:changed?`control_code_changed:${changed}`:null,error:r.timedOut?'cycle timed out':r.code===75?'push rejected':r.error||`exit ${r.code}`};
     },
+    journalPending:async()=>(await runCommand('node',[path.join(root,'scripts/carry_preclose_saves.mjs'),'pending','dev',journal],{timeoutMs:60000})).code===0,
     dispatchPages:async()=>{const r=await runCommand('gh',['workflow','run','pages.yml','--ref','main'],{timeoutMs:60000});if(r.code!==0)throw Error(`gh exit ${r.code}`);}
   });
   if(!out.ok)process.exit(1);
