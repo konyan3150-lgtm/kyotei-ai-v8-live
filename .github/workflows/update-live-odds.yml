@@ -2,8 +2,10 @@ name: Update live odds
 
 on:
   schedule:
-    - cron: "*/6 0-12,22-23 * * *"
-    - cron: "3-59/6 0-12,22-23 * * *"
+    # GitHub often starts scheduled runs late or skips them. Each started run keeps updating every
+    # 3 minutes for up to 5.5 h (scripts/update_loop.mjs); these triggers only (re)start that loop.
+    # While a run is active, a new trigger waits as the single pending run of the concurrency group.
+    - cron: "*/10 0-12,22-23 * * *"
   workflow_dispatch:
   push:
     branches: [main]
@@ -15,10 +17,15 @@ on:
       - "scripts/backfill_expert_history.mjs"
       - "scripts/odds-composer.json"
       - "scripts/update_server_predictions.mjs"
+      - "scripts/update_cycle.sh"
+      - "scripts/update_loop.mjs"
+      - "scripts/carry_preclose_saves.mjs"
+      - "scripts/journal_store.mjs"
       - ".github/workflows/update-live-odds.yml"
 
 permissions:
   contents: write
+  actions: write   # dispatch the Pages deploy after each pushed cycle
 
 concurrency:
   group: update-live-odds
@@ -29,16 +36,14 @@ jobs:
     # Production data is written only from main (never from an unmerged branch, also for manual runs).
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Sync latest main
-        run: git pull --ff-only origin main
-      - name: Capture validated history baseline
-        run: node scripts/verify_prediction_history.mjs dev "$RUNNER_TEMP/prediction-history-baseline.json" --save-baseline
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
@@ -52,33 +57,30 @@ jobs:
           COMPOSER: scripts/odds-composer.json
           COMPOSER_VENDOR_DIR: scripts/vendor
         run: composer install --no-dev --prefer-dist --no-progress --no-interaction
-      - name: Fetch near-cutoff trifecta odds
-        run: php scripts/fetch_live_odds.php
-      - name: Fetch official race results
-        # Early in the morning the official pay page can legitimately contain no results yet.
-        # Do not let that block fresh odds from being committed for the new day.
-        continue-on-error: true
-        run: node scripts/fetch_official_results.mjs
-      - name: Fetch official preview fallback
-        continue-on-error: true
-        run: node scripts/fetch_official_previews.mjs
-      - name: Build lightweight runtime data
-        run: node scripts/build_runtime_payloads.mjs
-      - name: Save predictions and settle results
-        run: node scripts/update_server_predictions.mjs
-      - name: Backfill historical Expert evaluations
-        run: node scripts/backfill_expert_history.mjs
-      - name: Verify history preservation before commit
-        run: node scripts/verify_prediction_history.mjs dev "$RUNNER_TEMP/prediction-history-baseline.json"
-      - name: Commit updated odds and predictions
+      - name: Test update loop and cycle (no production writes if these fail)
         run: |
-          if git diff --quiet -- odds.json dev/odds.json dev/official-results.json dev/official-previews.json dev/racer-aptitude-runtime.json.gz dev/course-stats-runtime.json dev/server-predictions.json dev/server-predictions-index.json dev/server-predictions-archive; then
-            echo "No odds or prediction changes"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add odds.json dev/odds.json dev/official-results.json dev/official-previews.json dev/racer-aptitude-runtime.json.gz dev/course-stats-runtime.json dev/server-predictions.json dev/server-predictions-index.json dev/server-predictions-archive
-          git commit -m "chore: update live odds and predictions"
-          # A changed remote head rejects this commit; retry from a fresh checkout next run.
-          git push origin HEAD:main
+          node scripts/test_update_loop.mjs
+          node scripts/test_carry_preclose_saves.mjs
+          node scripts/test_journal_store.mjs
+          node scripts/test_update_cycle.mjs
+      # Pre-close purchase journal: purchases origin/main does not hold yet survive into the next run.
+      # Stored on the git branch ops/preclose-journal (artifacts are deleted when a run is re-run; caches can be
+      # evicted). Any restore failure stops the job here, before any production write; it is never "no purchases".
+      - name: Restore pre-close purchase journal
+        id: restore
+        run: node scripts/journal_store.mjs restore "${{ runner.temp }}/v8-journal/preclose-journal.json"
+      - name: Update odds, predictions and results every 3 minutes
+        # Each cycle: sync to origin/main, history baseline, odds, official results/previews, runtime data,
+        # save predictions and settle, Expert backfill, history verification, commit and push.
+        # Data scripts changed on main are used from the next cycle. The loop itself, this workflow and the
+        # composer dependencies are fixed for the run: if they change on main, the loop stops and the pending
+        # run starts again with them.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CYCLE_CARRY_FILE: ${{ runner.temp }}/v8-journal/preclose-journal.json
+        run: node scripts/update_loop.mjs
+      # Required: save the journal (also after failure, cancellation or timeout) and read it back from origin.
+      # Skipped only when the restore failed, so a run that could not read the journal never overwrites it.
+      - name: Save pre-close purchase journal
+        if: always() && steps.restore.outcome == 'success'
+        run: node scripts/journal_store.mjs save "${{ runner.temp }}/v8-journal/preclose-journal.json"
