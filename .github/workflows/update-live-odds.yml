@@ -63,12 +63,11 @@ jobs:
           node scripts/test_carry_preclose_saves.mjs
           node scripts/test_journal_store.mjs
           node scripts/test_update_cycle.mjs
-      # Pre-close purchase journal: purchases origin does not hold yet survive into the next run.
-      # Restored as the union of all unexpired journal artifacts (7-day retention). Any failure stops the job
-      # here, before any production write; it is never treated as "no purchases".
-      - name: Restore pre-close purchase journal from earlier runs
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # Pre-close purchase journal: purchases origin/main does not hold yet survive into the next run.
+      # Stored on the git branch ops/preclose-journal (artifacts are deleted when a run is re-run; caches can be
+      # evicted). Any restore failure stops the job here, before any production write; it is never "no purchases".
+      - name: Restore pre-close purchase journal
+        id: restore
         run: node scripts/journal_store.mjs restore "${{ runner.temp }}/v8-journal/preclose-journal.json"
       - name: Update odds, predictions and results every 3 minutes
         # Each cycle: sync to origin/main, history baseline, odds, official results/previews, runtime data,
@@ -80,18 +79,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CYCLE_CARRY_FILE: ${{ runner.temp }}/v8-journal/preclose-journal.json
         run: node scripts/update_loop.mjs
-      - name: Check pre-close purchase journal
-        id: journal
-        if: always()
-        run: node scripts/journal_store.mjs status "${{ runner.temp }}/v8-journal/preclose-journal.json"
-      # Uploaded whenever purchases are still pending or unrecoverable, and also when the check above failed
-      # (to keep the file for diagnosis). Never uploaded empty, so an empty file cannot hide an earlier journal.
-      - name: Keep pre-close purchase journal for the next run (also after failure, cancellation or timeout)
-        # keep is 'false' only when the file is readable and empty (or absent, e.g. restore failed before writing).
-        if: always() && steps.journal.outputs.keep != 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: preclose-journal
-          path: ${{ runner.temp }}/v8-journal/preclose-journal.json
-          retention-days: 7
-          if-no-files-found: error
+      # Required: save the journal (also after failure, cancellation or timeout) and read it back from origin.
+      # Skipped only when the restore failed, so a run that could not read the journal never overwrites it.
+      - name: Save pre-close purchase journal
+        if: always() && steps.restore.outcome == 'success'
+        run: node scripts/journal_store.mjs save "${{ runner.temp }}/v8-journal/preclose-journal.json"

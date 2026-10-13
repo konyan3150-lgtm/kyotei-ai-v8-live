@@ -92,6 +92,16 @@ if(import.meta.url===`file://${process.argv[1]}`){
   const CONTROL=['scripts/update_loop.mjs','.github/workflows/update-live-odds.yml','scripts/odds-composer.json'];
   const controlHash=f=>{try{return crypto.createHash('sha256').update(fs.readFileSync(path.join(root,f))).digest('hex');}catch{return null;}};
   const controlAtStart=Object.fromEntries(CONTROL.map(f=>[f,controlHash(f)]));
+  // Save the journal to its git branch whenever it changed, so a runner that dies hard does not lose it.
+  // (The workflow also saves it at the end, as a required step.)
+  let savedJournalHash=null;
+  const fileHash=f=>{try{return crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');}catch{return null;}};
+  const checkpointJournal=async()=>{
+    const h=fileHash(journal);if(h===null||h===savedJournalHash)return;
+    const r=await runCommand('node',[path.join(root,'scripts/journal_store.mjs'),'save',journal],{timeoutMs:120000});
+    if(r.code===0&&!r.timedOut)savedJournalHash=h;else console.log(`::error::journal checkpoint failed (exit ${r.code}); retried after the next cycle and at the end`);
+  };
+  savedJournalHash=fileHash(journal);   // just restored from the branch
   const out=await runLoop({
     sleep:ms=>new Promise(r=>setTimeout(r,ms)),
     runCycle:async({timeoutMs,cycle})=>{
@@ -99,6 +109,7 @@ if(import.meta.url===`file://${process.argv[1]}`){
       try{fs.rmSync(mark,{force:true});}catch{}
       const r=await runCommand('bash',[path.join(root,'scripts/update_cycle.sh')],{timeoutMs,env:{CYCLE_PUSHED_MARK:mark,CYCLE_CARRY_FILE:journal}});
       console.log('::endgroup::');
+      await checkpointJournal();
       const changed=CONTROL.find(f=>controlHash(f)!==controlAtStart[f]);
       return {ok:r.code===0&&!r.timedOut,pushed:r.code===0&&fs.existsSync(mark),retryNow:r.code===75&&!r.timedOut,
         stop:changed?`control_code_changed:${changed}`:null,error:r.timedOut?'cycle timed out':r.code===75?'push rejected':r.error||`exit ${r.code}`};
