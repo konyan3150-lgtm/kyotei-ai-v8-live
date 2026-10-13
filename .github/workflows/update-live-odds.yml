@@ -20,6 +20,7 @@ on:
       - "scripts/update_cycle.sh"
       - "scripts/update_loop.mjs"
       - "scripts/carry_preclose_saves.mjs"
+      - "scripts/journal_store.mjs"
       - ".github/workflows/update-live-odds.yml"
 
 permissions:
@@ -56,18 +57,19 @@ jobs:
           COMPOSER: scripts/odds-composer.json
           COMPOSER_VENDOR_DIR: scripts/vendor
         run: composer install --no-dev --prefer-dist --no-progress --no-interaction
-      # Pre-close purchase journal: purchases not yet held by origin survive into the next runner.
-      - name: Restore pre-close purchase journal
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/v8-journal
-          key: preclose-journal-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: preclose-journal-
       - name: Test update loop and cycle (no production writes if these fail)
         run: |
           node scripts/test_update_loop.mjs
           node scripts/test_carry_preclose_saves.mjs
+          node scripts/test_journal_store.mjs
           node scripts/test_update_cycle.mjs
+      # Pre-close purchase journal: purchases origin does not hold yet survive into the next run.
+      # Restored as the union of all unexpired journal artifacts (7-day retention). Any failure stops the job
+      # here, before any production write; it is never treated as "no purchases".
+      - name: Restore pre-close purchase journal from earlier runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/journal_store.mjs restore "${{ runner.temp }}/v8-journal/preclose-journal.json"
       - name: Update odds, predictions and results every 3 minutes
         # Each cycle: sync to origin/main, history baseline, odds, official results/previews, runtime data,
         # save predictions and settle, Expert backfill, history verification, commit and push.
@@ -78,12 +80,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CYCLE_CARRY_FILE: ${{ runner.temp }}/v8-journal/preclose-journal.json
         run: node scripts/update_loop.mjs
-      - name: Keep the journal file for the cache
+      - name: Check pre-close purchase journal
+        id: journal
         if: always()
-        run: node scripts/carry_preclose_saves.mjs init dev "${{ runner.temp }}/v8-journal/preclose-journal.json"
-      - name: Save pre-close purchase journal (also after failure, cancellation or timeout)
-        if: always()
-        uses: actions/cache/save@v4
+        run: node scripts/journal_store.mjs status "${{ runner.temp }}/v8-journal/preclose-journal.json"
+      # Uploaded whenever purchases are still pending or unrecoverable, and also when the check above failed
+      # (to keep the file for diagnosis). Never uploaded empty, so an empty file cannot hide an earlier journal.
+      - name: Keep pre-close purchase journal for the next run (also after failure, cancellation or timeout)
+        # keep is 'false' only when the file is readable and empty (or absent, e.g. restore failed before writing).
+        if: always() && steps.journal.outputs.keep != 'false'
+        uses: actions/upload-artifact@v4
         with:
-          path: ${{ runner.temp }}/v8-journal
-          key: preclose-journal-${{ github.run_id }}-${{ github.run_attempt }}
+          name: preclose-journal
+          path: ${{ runner.temp }}/v8-journal/preclose-journal.json
+          retention-days: 7
+          if-no-files-found: error

@@ -22,7 +22,9 @@ const RESULT_FIELDS=['result','settled_at','expert_result'];
 const MODE_RESULT_FIELDS=['result'];
 const hasValue=rec=>!!rec&&Object.keys(rec.value_modes||{}).length>0;
 const closedRec=rec=>!!(rec?.settled||rec?.excluded||rec?.cancelled);
-export const emptyJournal=()=>({schema:SCHEMA,version:1,entries:{}});
+// entries: purchases origin does not hold yet. unrecoverable: purchases that can no longer be added to origin
+// (e.g. its record was settled before the EV save arrived); they are kept and reported as errors, never dropped.
+export const emptyJournal=()=>({schema:SCHEMA,version:1,entries:{},unrecoverable:{}});
 
 export function keyOf(rec){
   const p=n=>String(Number(n)).padStart(2,'0');
@@ -88,26 +90,30 @@ export function applyCarry(history,journal){
 
 // Remove entries origin now holds. records: all history records (hot + archives) of origin.
 export function confirmCarry(records,journal){
-  const out={...journal,entries:{...(journal?.entries||{})}},confirmed=[],conflicts=[];
+  const out={...journal,entries:{...(journal?.entries||{})},unrecoverable:{...(journal?.unrecoverable||{})}},confirmed=[],conflicts=[],unrecoverable=[];
+  const lose=(key,e,reason)=>{out.unrecoverable[key]={...e,reason};delete out.entries[key];unrecoverable.push([key,reason]);};
   for(const [key,e] of Object.entries(out.entries)){
-    const rec=records[key];if(!rec)continue;
+    const rec=records[key];
+    if(e.type==='record'&&!validPreClose(key,e.snapshot,e.snapshot?.saved_at)){lose(key,e,'invalid_snapshot');continue;}
+    if(!rec){if(e.type==='value')lose(key,e,'record_missing');continue;}
     if(e.type==='record'){
       if(sameRecord(rec,e.snapshot))confirmed.push(key);else conflicts.push(key);
       delete out.entries[key];
     }else if(e.type==='value'){
-      if(!hasValue(rec))continue;                          // not saved yet: keep
+      if(!hasValue(rec)){if(closedRec(rec))lose(key,e,'record_closed_before_value_saved');continue;}   // open: keep
       if(purchase(rec.value_modes)===purchase(e.snapshot.value_modes)&&rec.value_saved_at===e.snapshot.value_saved_at)confirmed.push(key);else conflicts.push(key);
       delete out.entries[key];
     }
   }
-  return {journal:out,confirmed,conflicts};
+  return {journal:out,confirmed,conflicts,unrecoverable};
 }
 
 export function readJournal(file){
   if(!fs.existsSync(file))return emptyJournal();
   const j=readJson(file);
   if(j?.schema!==SCHEMA||j.version!==1||!j.entries||typeof j.entries!=='object'||Array.isArray(j.entries))throw Error(`Invalid pre-close journal: ${file}`);
-  return j;
+  if(j.unrecoverable!==undefined&&(typeof j.unrecoverable!=='object'||Array.isArray(j.unrecoverable)))throw Error(`Invalid pre-close journal: ${file}`);
+  return {...j,unrecoverable:j.unrecoverable||{}};
 }
 export function writeJournal(file,journal){
   fs.mkdirSync(path.dirname(file),{recursive:true});
@@ -117,6 +123,8 @@ export function writeJournal(file,journal){
 }
 const allRecords=h=>({...h.hot.records,...Object.fromEntries([...h.archives.values()].flatMap(x=>Object.entries(x.records)))});
 
+// Exit codes: 0 ok (for "pending": entries are pending), 1 "pending": journal is empty, 2 error (unreadable,
+// invalid or any failure). Callers must never treat 2 as "no purchases".
 function main(){
   const [mode,dataDir,file,baseRef]=process.argv.slice(2);
   const hotFile=path.join(dataDir,'server-predictions.json'),indexFile=path.join(dataDir,'server-predictions-index.json'),archiveDir=path.join(dataDir,'server-predictions-archive');
@@ -139,14 +147,15 @@ function main(){
     }
     console.log(JSON.stringify({journal_entries:Object.keys(journal.entries).length,journal_applied:applied,journal_skipped:skipped}));
   }else if(mode==='confirm'){
-    const {journal:next,confirmed,conflicts}=confirmCarry(allRecords(loadHistory(hotFile,archiveDir,indexFile)),journal);
+    const {journal:next,confirmed,conflicts,unrecoverable}=confirmCarry(allRecords(loadHistory(hotFile,archiveDir,indexFile)),journal);
     for(const key of conflicts)console.log(`::warning::origin holds a different purchase for ${key}; origin kept and journal entry closed`);
+    for(const [key,why] of unrecoverable)console.log(`::error::pre-close purchase ${key} can no longer be added to origin (${why}); kept in the journal as unrecoverable`);
     writeJournal(file,next);
-    console.log(JSON.stringify({journal_confirmed:confirmed.length,journal_conflicts:conflicts.length,journal_remaining:Object.keys(next.entries).length}));
+    console.log(JSON.stringify({journal_confirmed:confirmed.length,journal_conflicts:conflicts.length,journal_remaining:Object.keys(next.entries).length,journal_unrecoverable:Object.keys(next.unrecoverable).length}));
   }else if(mode==='pending'){
     process.exit(Object.keys(journal.entries).length?0:1);
-  }else if(mode==='init'){
-    if(!fs.existsSync(file))writeJournal(file,emptyJournal());
-  }else throw Error('Usage: carry_preclose_saves.mjs capture|apply|confirm|pending|init DATA_DIR JOURNAL_FILE [BASE_REF]');
+  }else throw Error('Usage: carry_preclose_saves.mjs capture|apply|confirm|pending DATA_DIR JOURNAL_FILE [BASE_REF]');
 }
-if(import.meta.url===`file://${process.argv[1]}`)main();
+if(import.meta.url===`file://${process.argv[1]}`){
+  try{main();}catch(e){console.error(`::error::pre-close journal: ${e?.message||e}`);process.exit(2);}
+}

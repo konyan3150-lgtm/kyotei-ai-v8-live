@@ -47,13 +47,16 @@ export async function runLoop({now=()=>Date.now(),sleep,runCycle,dispatchPages,j
   }
   // Never end quietly with journaled pre-close purchases that origin does not hold yet: one more cycle right away
   // (the job limit leaves room for it), and if they are still pending the run fails; the journal is saved for the next run.
-  let journalLeft=false;
-  if(await journalPending()){
+  // journalPending() returns true/false; a failed check (unreadable/invalid journal, command error) throws and is
+  // never read as "empty".
+  const check=async()=>{try{return await journalPending();}catch(e){log(`::error::pre-close journal check failed: ${e?.message||e}`);return 'error';}};
+  let journalLeft=false,state=await check();
+  if(state!==false){
     cycles++;
     let result;try{result=await runCycle({timeoutMs:limits.cycleTimeoutMs,cycle:cycles,flush:true});}catch(e){result={ok:false,error:String(e?.message||e)};}
     if(result?.ok){succeeded++;if(result.pushed){pushed++;try{await dispatchPages();}catch(e){log(`::warning::Pages dispatch failed: ${e?.message||e}`);}}}else failures++;
-    journalLeft=await journalPending();
-    if(journalLeft)log('::error::pre-close purchases are still pending in the journal; it is saved for the next run');
+    state=await check();journalLeft=state!==false;
+    if(journalLeft)log(state==='error'?'::error::pre-close journal could not be checked; the run fails and the journal is kept':'::error::pre-close purchases are still pending in the journal; it is kept for the next run');
   }
   const summary={cycles,succeeded,failures,pushed,reason,journal_pending:journalLeft,elapsed_ms:now()-start};
   log(JSON.stringify({update_loop:summary}));
@@ -100,7 +103,11 @@ if(import.meta.url===`file://${process.argv[1]}`){
       return {ok:r.code===0&&!r.timedOut,pushed:r.code===0&&fs.existsSync(mark),retryNow:r.code===75&&!r.timedOut,
         stop:changed?`control_code_changed:${changed}`:null,error:r.timedOut?'cycle timed out':r.code===75?'push rejected':r.error||`exit ${r.code}`};
     },
-    journalPending:async()=>(await runCommand('node',[path.join(root,'scripts/carry_preclose_saves.mjs'),'pending','dev',journal],{timeoutMs:60000})).code===0,
+    journalPending:async()=>{
+      const r=await runCommand('node',[path.join(root,'scripts/carry_preclose_saves.mjs'),'pending','dev',journal],{timeoutMs:60000});
+      if(r.code===0&&!r.timedOut)return true;if(r.code===1&&!r.timedOut)return false;
+      throw Error(r.timedOut?'journal check timed out':`journal check exit ${r.code}`);
+    },
     dispatchPages:async()=>{const r=await runCommand('gh',['workflow','run','pages.yml','--ref','main'],{timeoutMs:60000});if(r.code!==0)throw Error(`gh exit ${r.code}`);}
   });
   if(!out.ok)process.exit(1);

@@ -66,13 +66,20 @@ assert.ok(validPreClose(K(9),rec(9,{closed_at:undefined,provenance:{closed_at:'2
   assert.deepEqual(h.hot.records[K(9)],other);assert.deepEqual(a.applied,[[K(1),'value']]);
   // Origin with the same purchase, already settled: confirmed. Origin with a different purchase: closed with conflict.
   const settledSame=rec(9);settle(settledSame,result,{source:'official'});
-  let c=confirmCarry({[K(9)]:settledSame},j);assert.deepEqual(c.confirmed,[K(9)]);assert.deepEqual(Object.keys(c.journal.entries),[K(1)]);
+  let c=confirmCarry({[K(9)]:settledSame,[K(1)]:rec(1)},j);assert.deepEqual(c.confirmed,[K(9)]);assert.deepEqual(Object.keys(c.journal.entries),[K(1)]);
   c=confirmCarry({[K(9)]:other},j);assert.deepEqual(c.conflicts,[K(9)]);
   // EV not in origin yet: kept. EV in origin: confirmed.
   c=confirmCarry({[K(1)]:rec(1)},j);assert.ok(c.journal.entries[K(1)]);
   c=confirmCarry({[K(1)]:{...rec(1),...structuredClone(value)}},j);assert.deepEqual(c.confirmed,[K(1)]);
-  // Not in origin at all: kept.
+  // Record not in origin at all: kept (apply will add it).
   assert.ok(confirmCarry({},j).journal.entries[K(9)]);
+  // EV that can no longer be added (record settled without it, or record gone): moved to unrecoverable, never dropped.
+  const settledNoValue=rec(1);settle(settledNoValue,result,{source:'official'});
+  c=confirmCarry({[K(1)]:settledNoValue},j);assert.deepEqual(c.unrecoverable,[[K(1),'record_closed_before_value_saved']]);
+  assert.equal(c.journal.entries[K(1)],undefined);assert.equal(c.journal.unrecoverable[K(1)].reason,'record_closed_before_value_saved');assert.deepEqual(c.journal.unrecoverable[K(1)].snapshot,value);
+  c=confirmCarry({},j);assert.deepEqual(c.unrecoverable,[[K(1),'record_missing']]);
+  // A broken record snapshot (e.g. from a damaged artifact) is not applied and is kept as unrecoverable.
+  c=confirmCarry({},{entries:{[K(9)]:{type:'record',snapshot:rec(9,{closed_at:undefined})}}});assert.deepEqual(c.unrecoverable,[[K(9),'invalid_snapshot']]);
   // Invalid snapshot is not applied; archived key is not re-added to hot.
   const bad={entries:{[K(9)]:{type:'record',snapshot:rec(9,{closed_at:undefined})}}};assert.deepEqual(applyCarry(hist({}),bad).skipped,[[K(9),'invalid_snapshot']]);
   const ha=hist({},[K(9)]);applyCarry(ha,j);assert.equal(ha.hot.records[K(9)],undefined);

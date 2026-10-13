@@ -28,6 +28,9 @@ node scripts/fetch_official_results.mjs || echo "::warning::official results fet
 node scripts/fetch_official_previews.mjs || echo "::warning::official preview fetch failed; continuing"
 node scripts/build_runtime_payloads.mjs
 node scripts/update_server_predictions.mjs
+# New purchases are journaled as soon as they are written and the history is valid, before any later step can fail.
+node scripts/verify_prediction_history.mjs dev "$BASELINE"
+node scripts/carry_preclose_saves.mjs capture dev "$JOURNAL" "$BASE"
 node scripts/backfill_expert_history.mjs
 node scripts/verify_prediction_history.mjs dev "$BASELINE"
 
@@ -36,7 +39,7 @@ if [ -z "$(git status --porcelain -- "${PATHS[@]}")" ]; then
   echo "No odds or prediction changes"
   exit 0
 fi
-# Record this cycle's new pre-close purchases in the journal before pushing (append-only, atomic).
+# Capture again right before the commit (append-only, atomic; existing entries are never replaced).
 node scripts/carry_preclose_saves.mjs capture dev "$JOURNAL" "$BASE"
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -63,5 +63,9 @@ for(const opts of [{startMs:jst(21,55)},{startMs:jst(9),outcome:c=>c===2?{ok:tru
   assert.equal(r.ok,false);assert.equal(r.journal_pending,true);assert.ok(s.logs.some(m=>m.includes('still pending in the journal')));}
 // 15) No pending journal: no extra cycle.
 {const s=sim({startMs:jst(21,55),journalPending:async()=>false});const r=await s.run;assert.equal(r.cycles,2);assert.ok(r.ok);}
+// 16) The journal check itself fails (unreadable/invalid journal, command error): never read as empty; the run fails.
+{const s=sim({startMs:jst(21,55),journalPending:async()=>{throw Error('journal check exit 2')}});const r=await s.run;
+ assert.equal(r.ok,false);assert.equal(r.journal_pending,true);assert.equal(r.cycles,3);   // 2 regular + 1 flush attempt
+ assert.ok(s.logs.some(m=>m.includes('journal check failed')));assert.ok(s.logs.some(m=>m.includes('could not be checked')));}
 assert.ok(Object.isFrozen(LOOP));assert.ok(LOOP.maxRunMs+LOOP.cycleTimeoutMs<=345*MIN);   // regular cycles end by maxRunMs; one journal flush cycle still ends before the 350-min job limit (cache save after)
-console.log('update loop OK: 3-minute cadence, 5.5 h bound, racing-hours stop, single night cycle, failure streak stop, slow and timed-out cycles bounded, Pages dispatch only after a push, process-group timeout, immediate retry after a rejected push, stop on control code change, no surviving child after return, journal flush before ending and failure if it stays pending');
+console.log('update loop OK: 3-minute cadence, 5.5 h bound, racing-hours stop, single night cycle, failure streak stop, slow and timed-out cycles bounded, Pages dispatch only after a push, process-group timeout, immediate retry after a rejected push, stop on control code change, no surviving child after return, journal flush before ending and failure if it stays pending or cannot be checked');

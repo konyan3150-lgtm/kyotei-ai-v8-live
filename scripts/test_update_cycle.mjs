@@ -85,5 +85,12 @@ else if(!env.NO_CHANGE)fs.appendFileSync('dev/odds.json','x\\n');`);
   r=spawnSync('bash',['scripts/update_cycle.sh'],{cwd:runner2,encoding:'utf8',env:{...gitEnv,PATH:`${bin}:${process.env.PATH}`,RUNNER_TEMP:tmp,CYCLE_PUSHED_MARK:mark,CYCLE_CARRY_FILE:restored,NO_CHANGE:'1'}});
   assert.equal(r.status,0,r.stderr);assert.deepEqual(readOrigin(HOT).records[KEY3],saved3);
   assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(restored,'utf8')).entries),[]);
-  console.log('update cycle OK: pushes changes, skips no-ops, starts from latest origin, rejected pre-close save survives a close and is re-added exactly, origin wins on conflict, failed-cycle archive leftovers cleaned (vendor kept), failed steps never commit, journal restored on a new runner');
+
+  // 9) New purchase written, then a later step (Expert backfill) fails; the next cycle is after close and creates nothing:
+  //    the purchase was journaled right after it was written, so origin still gets it.
+  const KEY4='kyotei_v8_dev_result_20261013_24_12',saved4={...saved,race:'12'};
+  r=cycle({PRECLOSE_KEY:KEY4,PRECLOSE_RECORD:JSON.stringify(saved4),FAIL_STEP:'backfill_expert_history.mjs'});assert.notEqual(r.status,0);
+  assert.equal(readOrigin(HOT).records[KEY4],undefined);assert.equal(pending(),1);
+  r=cycle({NO_CHANGE:'1'});assert.equal(r.status,0,r.stderr);assert.deepEqual(readOrigin(HOT).records[KEY4],saved4);assert.equal(pending(),0);
+  console.log('update cycle OK: pushes changes, skips no-ops, starts from latest origin, rejected pre-close save survives a close and is re-added exactly, origin wins on conflict, failed-cycle archive leftovers cleaned (vendor kept), failed steps never commit, journal restored on a new runner, purchase journaled before later steps can fail');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
