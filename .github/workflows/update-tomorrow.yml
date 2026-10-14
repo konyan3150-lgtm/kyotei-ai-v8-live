@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - "scripts/fetch_tomorrow.py"
+      - "scripts/commit_paths.sh"
       - "scripts/fetch_tide.py"
       - ".github/workflows/update-tomorrow.yml"
 
@@ -40,14 +41,12 @@ jobs:
           cp dev/tomorrow.json tomorrow.json
       - name: Fetch JMA astronomical tide table
         run: python scripts/fetch_tide.py dev/tide.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Test commit retry
+        run: node scripts/test_commit_paths.mjs
       - name: Commit changed program
+        # Retries a push rejected by other workflows' pushes from the latest origin/main (only these files are put back).
         run: |
-          if git diff --quiet -- dev/tomorrow.json tomorrow.json dev/tide.json; then
-            echo "Next-day program is already current."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dev/tomorrow.json tomorrow.json dev/tide.json
-          git commit -m "chore: update next-day race program"
-          git push
+          bash scripts/commit_paths.sh "chore: update next-day race program" dev/tomorrow.json tomorrow.json dev/tide.json
