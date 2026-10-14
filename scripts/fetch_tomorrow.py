@@ -130,7 +130,8 @@ def parse_race(html: str, date: str, venue: int, race: int):
             seen.add(key)
             unique.append(racer)
     if len(unique) != 6:
-        return None
+        # Same strict check as before; the reason is now reported instead of silently returning nothing.
+        raise ValueError(f"racers {len(unique)}/6 (table rows {len(soup.select('tr'))}, matched rows {len(racers)}, html {len(html)} chars)")
 
     title_node = next(
         (node for node in soup.select("h2, h3") if "m" in clean(node.get_text()).lower()),
@@ -149,7 +150,7 @@ def parse_race(html: str, date: str, venue: int, race: int):
             close_time = full_times[race - 1]
             break
     if not close_time:
-        return None
+        raise ValueError("close time not found (no table with 12 times)")
 
     closed_at = f"{date[:4]}-{date[4:6]}-{date[6:8]} {close_time}:00"
     return {
@@ -195,6 +196,13 @@ def build(date: str):
     stadiums = dict(sorted(stadiums.items(), key=lambda x: int(x[0])))
     race_count = sum(len(s["races"]) for s in stadiums.values())
     expected = len(venues) * 12
+    reasons = {}
+    for f in failures:
+        key = f.split(": ", 1)[-1].split(" (")[0]
+        reasons[key] = reasons.get(key, 0) + 1
+    print(f"Next-day program {date}: venues {len(venues)} {venues}, races parsed {race_count}/{expected}, failures {len(failures)}, reasons {reasons}")
+    for f in failures[:3]:
+        print(f"  failure sample: {f}")
     if not stadiums or race_count != expected:
         sample = "; ".join(failures[:5])
         raise IncompleteProgramError(f"Next-day program is incomplete ({race_count}/{expected} races). {sample}")
