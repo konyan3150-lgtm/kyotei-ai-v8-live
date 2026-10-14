@@ -89,3 +89,19 @@ jobs:
       - name: Save pre-close purchase journal
         if: always() && steps.restore.outcome == 'success'
         run: node scripts/journal_store.mjs save "${{ runner.temp }}/v8-journal/preclose-journal.json"
+      # Night handover to the morning wake chain (wake-update.yml starts this workflow at 07:00 JST without relying on
+      # `schedule`). Only between 21:00 and 04:59 JST; extra wakers exit as duplicates. A failed handover is reported
+      # as an error annotation but does not fail this run (its updates are already saved); the fallback schedules of
+      # wake-update.yml remain.
+      - name: Hand over to the morning wake chain
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          h=$(TZ=Asia/Tokyo date +%H)
+          if [ "$h" -ge 21 ] || [ "$h" -lt 5 ]; then
+            if timeout 60 gh workflow run wake-update.yml --ref main; then echo "::notice title=wake handover::wake-update.yml dispatched at $(TZ=Asia/Tokyo date -Iseconds)";
+            else echo "::error title=wake handover failed::could not dispatch wake-update.yml; its fallback schedules remain"; fi
+          else
+            echo "not night (JST hour $h): no handover"
+          fi

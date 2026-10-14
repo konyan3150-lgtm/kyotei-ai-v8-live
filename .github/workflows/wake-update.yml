@@ -1,0 +1,56 @@
+name: Wake morning update
+# Starts "Update live odds" at 07:00 JST via workflow_dispatch, without relying on GitHub's `schedule` for the start
+# itself (10/14: no scheduled start between 07:00 and 09:53 JST; 10/15: none by 07:18 JST). See ops/wake-chain/README.md.
+# Scope: a helper inside GitHub Actions against missing `schedule` starts, not independent of GitHub itself.
+# Credentials: only this job's GITHUB_TOKEN (actions: write). The only allowed target is update-live-odds.yml.
+# Started by: the night end of "Update live odds" (handover step) and the fallback schedules below; duplicates are
+# suppressed by the waker (one waker per target time) and the target is not started while it runs or ran recently.
+run-name: wake ${{ inputs.target_iso || 'auto' }} hop ${{ inputs.hop || '0' }}
+on:
+  workflow_dispatch:
+    inputs:
+      target_iso: {description: "Target time (ISO). Empty = next 07:00 JST", required: false, default: ""}
+      target_workflow: {description: "Workflow to start (only update-live-odds.yml is allowed)", required: false, default: "update-live-odds.yml"}
+      hop: {description: "Hop count (set by the chain)", required: false, default: "0"}
+      parent_run_id: {description: "Run that dispatched this one (set by the chain)", required: false, default: ""}
+  schedule:
+    # Fallback starters (unreliable on their own; extra wakers exit as duplicates): 21:40, 22:40, 23:40 and 06:40 JST.
+    - cron: "40 12,13,14,21 * * *"
+  push:
+    branches: [main]
+    paths: ["ops/wake-chain/**", ".github/workflows/wake-update.yml"]
+permissions:
+  contents: read
+  actions: write
+jobs:
+  test:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "24"}
+      - run: node ops/wake-chain/test.mjs
+  wake:
+    # Production is started only from main (never from an unmerged branch).
+    if: github.event_name != 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "24"}
+      - name: Test wake chain
+        run: node ops/wake-chain/test.mjs
+      - name: Wait and start the morning update
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WAKE_SELF_WORKFLOW: wake-update.yml
+          WAKE_ALLOWED_TARGETS: update-live-odds.yml
+          WAKE_TARGET_WORKFLOW: ${{ inputs.target_workflow || 'update-live-odds.yml' }}
+          WAKE_TARGET_ISO: ${{ inputs.target_iso }}
+          WAKE_TARGET_TIME: "07:00"
+          WAKE_HOP: ${{ inputs.hop }}
+          WAKE_PARENT_RUN_ID: ${{ inputs.parent_run_id }}
+        run: node ops/wake-chain/wake.mjs
