@@ -131,7 +131,9 @@ def parse_race(html: str, date: str, venue: int, race: int):
             unique.append(racer)
     if len(unique) != 6:
         # Same strict check as before; the reason is now reported instead of silently returning nothing.
-        raise ValueError(f"racers {len(unique)}/6 (table rows {len(soup.select('tr'))}, matched rows {len(racers)}, html {len(html)} chars)")
+        title = clean(soup.title.get_text(" ", strip=True)) if soup.title else ""
+        snippet = clean(soup.body.get_text(" ", strip=True))[:120] if soup.body else ""
+        raise ValueError(f"racers {len(unique)}/6 (table rows {len(soup.select('tr'))}, matched rows {len(racers)}, html {len(html)} chars, title {title!r}, text {snippet!r})")
 
     title_node = next(
         (node for node in soup.select("h2, h3") if "m" in clean(node.get_text()).lower()),
