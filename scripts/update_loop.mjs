@@ -9,28 +9,51 @@ export const LOOP=Object.freeze({
   cycleTimeoutMs:12*60000,   // one cycle is stopped after this (the former job limit)
   maxRunMs:330*60000,        // no new cycle that could end after 5.5 h (job limit is 350 min)
   startHourJst:7,endHourJst:22,
+  // Races closing after 22:00 JST (e.g. Shimonoseki 11R/12R at 22:20/22:45): keep updating until the last close of
+  // the day plus a grace period for the official result, and past that only while today's closed races are still
+  // unsettled. Never after hardEndHourJst, so a result that is never published cannot keep the run going.
+  lateGraceMs:30*60000,hardEndHourJst:23.75,
   maxConsecutiveFailures:5,
   maxImmediateRetries:2      // a rejected push is retried right away (pre-close saves are carried over)
 });
 
+const jstHour=ms=>{const d=new Date(ms+9*3600000);return d.getUTCHours()+d.getUTCMinutes()/60+d.getUTCSeconds()/3600;};
+export const jstDate=ms=>new Date(ms+9*3600000).toISOString().slice(0,10).replace(/-/g,'');
 export function inRacingHours(ms,{startHourJst=LOOP.startHourJst,endHourJst=LOOP.endHourJst}={}){
-  const d=new Date(ms+9*3600000),h=d.getUTCHours()+d.getUTCMinutes()/60;
+  const h=jstHour(ms);
   return h>=startHourJst&&h<endHourJst;
+}
+// day = {date:'YYYYMMDD' (JST), lastCloseMs, unsettled} from the data the last cycle left (null if unknown).
+// Returns null while updates should go on, otherwise the stop reason.
+export function racingStop(ms,day,limits=LOOP){
+  const {startHourJst=LOOP.startHourJst,endHourJst=LOOP.endHourJst,lateGraceMs=LOOP.lateGraceMs,hardEndHourJst=LOOP.hardEndHourJst}=limits;
+  if(inRacingHours(ms,{startHourJst,endHourJst}))return null;
+  const h=jstHour(ms);
+  if(h<endHourJst)return 'outside_racing_hours';                       // before the morning start
+  const late=day&&day.date===jstDate(ms)&&Number.isFinite(day.lastCloseMs)&&jstHour(day.lastCloseMs)>=endHourJst&&jstDate(day.lastCloseMs)===day.date;
+  if(!late)return 'outside_racing_hours';                              // no race closes after 22:00 (or unknown): as before
+  if(h>=hardEndHourJst)return 'night_hard_limit';
+  if(ms<day.lastCloseMs+lateGraceMs)return null;                       // late races still to close / result grace
+  if(Number(day.unsettled)>0)return null;                              // results published late: keep trying until the hard end
+  return 'late_races_finished';
 }
 
 export async function runLoop({now=()=>Date.now(),sleep,runCycle,dispatchPages,journalPending=async()=>false,log=console.log,limits=LOOP}){
-  const start=now();let cycles=0,succeeded=0,failures=0,streak=0,pushed=0,reason=null,immediate=0;
+  const start=now();let cycles=0,succeeded=0,failures=0,streak=0,pushed=0,reason=null,immediate=0,day=null,late=0;
   while(true){
     const t=now();
     if(cycles>0){
       // The first cycle always runs (manual or push-triggered runs keep the old behaviour).
-      if(!inRacingHours(t,limits)){reason='outside_racing_hours';break;}
+      const stop=racingStop(t,day,limits);
+      if(stop){reason=stop;break;}
+      if(!inRacingHours(t,limits))late++;
       if(t-start+limits.cycleTimeoutMs>limits.maxRunMs){reason='run_time_limit';break;}
     }
     cycles++;
     let result;
     try{result=await runCycle({timeoutMs:limits.cycleTimeoutMs,cycle:cycles});}
     catch(e){result={ok:false,error:String(e?.message||e)};}
+    if(result&&'day' in result)day=result.day;   // refreshed after every cycle (failed reads give null: no late extension)
     if(result?.ok){
       succeeded++;streak=0;
       if(result.pushed){pushed++;try{await dispatchPages();}catch(e){log(`::warning::Pages dispatch failed: ${e?.message||e}`);}}
@@ -58,9 +81,24 @@ export async function runLoop({now=()=>Date.now(),sleep,runCycle,dispatchPages,j
     state=await check();journalLeft=state!==false;
     if(journalLeft)log(state==='error'?'::error::pre-close journal could not be checked; the run fails and the journal is kept':'::error::pre-close purchases are still pending in the journal; it is kept for the next run');
   }
-  const summary={cycles,succeeded,failures,pushed,reason,journal_pending:journalLeft,elapsed_ms:now()-start};
+  const summary={cycles,succeeded,failures,pushed,reason,late_cycles:late,last_close:day&&Number.isFinite(day.lastCloseMs)?new Date(day.lastCloseMs).toISOString():null,unsettled:day?.unsettled??null,journal_pending:journalLeft,elapsed_ms:now()-start};
   log(JSON.stringify({update_loop:summary}));
   return {...summary,ok:succeeded>0&&reason!=='too_many_consecutive_failures'&&!journalLeft};
+}
+
+// Today's last close (all races in dev/odds.json) and today's saved records that closed but are not settled yet.
+export function dayState(root,nowMs,fs){
+  const read=f=>JSON.parse(fs.readFileSync(path.join(root,f),'utf8'));
+  const today=jstDate(nowMs),odds=read('dev/odds.json');
+  if(String(odds?.date)!==today)return {date:today,lastCloseMs:null,unsettled:0};
+  let lastCloseMs=null;
+  for(const venue of Object.values(odds.races||{}))for(const r of Object.values(venue||{})){
+    const c=Date.parse(r?.closed_at||'');if(Number.isFinite(c)&&jstDate(c)===today&&(lastCloseMs===null||c>lastCloseMs))lastCloseMs=c;}
+  const sp=read('dev/server-predictions.json');let unsettled=0;
+  for(const [key,r] of Object.entries(sp?.records||{})){
+    if(!r||!key.includes(`_${today}_`)||r.settled||r.cancelled||r.excluded)continue;
+    const c=Date.parse(r.closed_at||'');if(Number.isFinite(c)&&c<=nowMs)unsettled++;}
+  return {date:today,lastCloseMs,unsettled};
 }
 
 const groupAlive=pgid=>{try{process.kill(-pgid,0);return true;}catch(e){return e.code==='EPERM';}};
@@ -102,6 +140,7 @@ if(import.meta.url===`file://${process.argv[1]}`){
     if(r.code===0&&!r.timedOut)savedJournalHash=h;else console.log(`::error::journal checkpoint failed (exit ${r.code}); retried after the next cycle and at the end`);
   };
   savedJournalHash=fileHash(journal);   // just restored from the branch
+  const readDay=()=>{try{return dayState(root,Date.now(),fs);}catch(e){console.log(`::warning::day state unreadable: ${e?.message||e}`);return null;}};
   const out=await runLoop({
     sleep:ms=>new Promise(r=>setTimeout(r,ms)),
     runCycle:async({timeoutMs,cycle})=>{
@@ -112,7 +151,7 @@ if(import.meta.url===`file://${process.argv[1]}`){
       await checkpointJournal();
       const changed=CONTROL.find(f=>controlHash(f)!==controlAtStart[f]);
       return {ok:r.code===0&&!r.timedOut,pushed:r.code===0&&fs.existsSync(mark),retryNow:r.code===75&&!r.timedOut,
-        stop:changed?`control_code_changed:${changed}`:null,error:r.timedOut?'cycle timed out':r.code===75?'push rejected':r.error||`exit ${r.code}`};
+        stop:changed?`control_code_changed:${changed}`:null,day:readDay(),error:r.timedOut?'cycle timed out':r.code===75?'push rejected':r.error||`exit ${r.code}`};
     },
     journalPending:async()=>{
       const r=await runCommand('node',[path.join(root,'scripts/carry_preclose_saves.mjs'),'pending','dev',journal],{timeoutMs:60000});

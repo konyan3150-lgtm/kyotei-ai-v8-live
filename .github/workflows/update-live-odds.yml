@@ -8,6 +8,9 @@ on:
     # Off the busy :00/:10 minutes, where GitHub drops scheduled runs most (on 10/14 the */10 schedule did not
     # start between 07:00 and 09:53 JST while the hourly :17 recovery schedule did).
     - cron: "2-59/5 0-12,22-23 * * *"
+    # 22:07-22:47 JST: (re)start the loop for races closing after 22:00 (the loop stops by itself when there are none,
+    # after the last close + result grace, and at 23:45 JST at the latest).
+    - cron: "7-47/10 13 * * *"
   workflow_dispatch:
   push:
     branches: [main]
