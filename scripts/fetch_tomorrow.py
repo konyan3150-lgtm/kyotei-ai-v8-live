@@ -212,7 +212,8 @@ def main() -> int:
     try:
         payload = build(target)
     except IncompleteProgramError as exc:
-        print(f"Waiting for official next-day data: {exc}")
+        # Visible in the run summary: the previous program file is kept (the app ignores it unless its date matches).
+        print(f"::warning::Next-day program not written (official data incomplete): {exc}")
         return 0
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
