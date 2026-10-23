@@ -1,0 +1,50 @@
+name: Hand over the update loop
+# Started only by "Update live odds" when its loop stopped normally at the 5.5 h run limit (see that workflow).
+# Waits until that run has finished successfully and until no run of the shared concurrency group (Update, Recover)
+# is queued or running, stops if another update already runs or started within 10 minutes, then dispatches
+# update-live-odds.yml and confirms that it was accepted and actually started (re-dispatch after a cancel before start,
+# at most 3 times). One overall deadline of 45 minutes. Only GITHUB_TOKEN; the only allowed target is the update.
+# Own concurrency group, so the update/Recover group never cancels this waker. See ops/wake-chain/README.md.
+run-name: handoff from ${{ inputs.parent_run_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      parent_run_id: {description: "Update run that handed over", required: true}
+  push:
+    branches: [main]
+    paths: ["ops/wake-chain/handoff.mjs", "ops/wake-chain/handoff_gate.mjs", "ops/wake-chain/test_handoff.mjs", ".github/workflows/handoff-update.yml"]
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: update-handoff
+  cancel-in-progress: false
+jobs:
+  test:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "24"}
+      - run: node ops/wake-chain/test_handoff.mjs
+  handoff:
+    # Production is started only from main.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "24"}
+      - name: Test hand-over
+        run: node ops/wake-chain/test_handoff.mjs
+      - name: Wait and start the next update
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HANDOFF_TARGET: update-live-odds.yml
+          HANDOFF_ALLOWED: update-live-odds.yml
+          HANDOFF_GROUP: update-live-odds.yml,settle-pending-results.yml
+          HANDOFF_PARENT: ${{ inputs.parent_run_id }}
+        run: node ops/wake-chain/handoff.mjs

@@ -83,7 +83,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CYCLE_CARRY_FILE: ${{ runner.temp }}/v8-journal/preclose-journal.json
-        run: node scripts/update_loop.mjs
+          LOOP_SUMMARY_FILE: ${{ runner.temp }}/loop-summary.json
+        run: |
+          echo "RUN_STARTED_AT=$(date -u -Iseconds)" >> "$GITHUB_ENV"
+          node scripts/update_loop.mjs
       # Required: save the journal (also after failure, cancellation or timeout) and read it back from origin.
       # Skipped only when the restore failed, so a run that could not read the journal never overwrites it.
       - name: Save pre-close purchase journal
@@ -105,3 +108,15 @@ jobs:
           else
             echo "not night (JST hour $h): no handover"
           fi
+      # Midday hand-over: the loop stops at its 5.5 h limit (about 12:19 JST after the 07:00 start) and its pending
+      # successor can be replaced in the shared concurrency group (10/20-10/23: ~2 h without odds updates). Only after a
+      # normal stop at the run time limit (ok, no pending journal), same JST date, before 21:00 JST, at most 3 per day,
+      # this dispatches handoff-update.yml, which waits for this run to finish successfully and for an idle group and
+      # then starts the next update. A failed decision or dispatch is an annotation; this run keeps its result.
+      - name: Hand over at the run time limit
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HANDOFF_WORKFLOW: handoff-update.yml
+          LOOP_SUMMARY_FILE: ${{ runner.temp }}/loop-summary.json
+        run: node ops/wake-chain/handoff_gate.mjs

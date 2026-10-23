@@ -134,6 +134,12 @@ export function dayState(root,nowMs,fs){
   return {date:today,lastCloseMs,unsettled};
 }
 
+export function writeLoopSummary(file,out,fs){
+  const keep={reason:out.reason,ok:!!out.ok,journal_pending:!!out.journal_pending,cycles:out.cycles,succeeded:out.succeeded,failures:out.failures,elapsed_ms:out.elapsed_ms,written_at:new Date().toISOString()};
+  fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file+'.tmp',JSON.stringify(keep)+'\n');fs.renameSync(file+'.tmp',file);
+  return keep;
+}
+
 const groupAlive=pgid=>{try{process.kill(-pgid,0);return true;}catch(e){return e.code==='EPERM';}};
 async function stopGroup(pgid,graceMs){
   try{process.kill(-pgid,'SIGTERM');}catch{}
@@ -193,5 +199,8 @@ if(import.meta.url===`file://${process.argv[1]}`){
     },
     dispatchPages:async()=>{const r=await runCommand('gh',['workflow','run','pages.yml','--ref','main'],{timeoutMs:LOOP.dispatchTimeoutMs,graceMs:LOOP.stopGraceMs});if(r.code!==0)throw Error(`gh exit ${r.code}`);}
   });
+  // For the midday hand-over gate (ops/wake-chain/handoff_gate.mjs): how this run's loop ended. Written before exiting,
+  // also when the loop failed; a write failure only warns (the loop's own result decides the exit code).
+  if(process.env.LOOP_SUMMARY_FILE){try{writeLoopSummary(process.env.LOOP_SUMMARY_FILE,out,fs);}catch(e){console.log(`::warning::loop summary not written: ${e?.message||e}`);}}
   if(!out.ok)process.exit(1);
 }

@@ -58,7 +58,8 @@ export function github({token,repo,request=fetch}){
   };
   return {
     runs:async(workflow,query='')=>{const p=await call(`/actions/workflows/${workflow}/runs?branch=main&per_page=50${query}`);if(!Array.isArray(p?.workflow_runs))throw Error('invalid runs response');return p.workflow_runs;},
-    dispatch:async(workflow,inputs)=>call(`/actions/workflows/${workflow}/dispatches`,{method:'POST',body:JSON.stringify({ref:'main',...(inputs?{inputs}:{})})})
+    dispatch:async(workflow,inputs)=>call(`/actions/workflows/${workflow}/dispatches`,{method:'POST',body:JSON.stringify({ref:'main',...(inputs?{inputs}:{})})}),
+    run:async id=>{if(!Number.isSafeInteger(Number(id)))throw Error(`invalid run id ${id}`);const r=await call(`/actions/runs/${Number(id)}`);if(!r||typeof r.status!=='string')throw Error('invalid run response');return r;}
   };
 }
 
