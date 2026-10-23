@@ -54,3 +54,34 @@ GitHub runners can themselves be delayed or fail; this removes the dependency on
   concurrency group (shared with Recover) still applies. The existing `schedule` of the update stays as before.
 - Verified in DEV (kyotei-ai-v8-dev): hops and 07:00 start (probe run 38644485169 started 07:00:07 JST on 10/15),
   duplicates, already-running/recent target, allowlist, 5xx and failed-confirmation handling.
+
+## Midday hand-over (`handoff.mjs` / `handoff_gate.mjs`, production: `handoff-update.yml`)
+Problem (10/20-10/23): the 07:00 update loop stops at its 5.5 h limit around 12:19 JST; its pending successor in the
+shared concurrency group was cancelled at the same second a Recover run was created (10/20 01:52:30/01:52:28Z,
+10/21 01:39:16/15, 10/22 01:34:09/08, 10/23 01:34:42/41 — timing match, cause not proven), and no update ran until a
+late `schedule` start (~2 h without odds updates).
+- Gate (end of the update run): only a normal stop at the run time limit with ok and no pending journal, the same JST
+  date as the run start, before 21:00 JST, and at most 3 hand-overs per JST day. Never after failures, night/racing-hours
+  stops or control-code stops. A failed gate/dispatch is an error annotation, the update run keeps its result.
+- Waker (own concurrency group): waits until the parent run has completed and until no run of the shared group is
+  queued/running (e.g. a pending Recover), stops if another update is active or started within 10 minutes, dispatches,
+  confirms the dispatch created a run (accepted) and then that the run actually started; a run cancelled before
+  starting is re-dispatched after the group is idle again, at most 3 times. All waits are bounded.
+- DEV verification uses harmless probes in their own group (`handoff-probe-long.yml` plays Update,
+  `handoff-probe-short.yml` plays Recover).
+
+### DEV verification of the hand-over (2026-10-23, Actions, harmless probes)
+- 22:18 JST: gate refused ("too_late_in_day", 21:00 limit) — run 39959814041
+- 22:23 JST (hour limit lifted for the test only): parent 39960531260 handed over; the waker 39960807761 waited for the parent
+  and for the pending short probe (Recover role, ran 13:23:39–13:24:21Z), then stopped with "recent_run" because a long
+  probe from the first test had started within 10 minutes (deduplication working)
+- 22:34 JST, clean run: parent 39962370352 (13:34:42–13:36:46Z) dispatched the waker 39962648058 at 13:36:42Z while still
+  running; the short probe 39962433955, queued at 13:35:09Z, ran after the parent until 13:37:31Z; the group was idle at
+  13:37:40Z; dispatch 13:37:40.5Z; the new long probe 39962783960 actually started 13:37:41Z ("started")
+- Not covered live (unit tests only): cancel-before-start and re-dispatch, dispatch 5xx, bounded-wait failures, journal
+  pending / failures (the gate refuses those)
+
+- Production: the last step of "Update live odds" runs the gate; `handoff-update.yml` (own concurrency group, 60-min job,
+  45-min overall deadline) runs the waker with target update-live-odds.yml and group update-live-odds.yml +
+  settle-pending-results.yml. Only a parent whose final conclusion is success is handed over; while waiting for an idle
+  group it stops as soon as another update runs or started within 10 minutes. The concurrency groups are unchanged.

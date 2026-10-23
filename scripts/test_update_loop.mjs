@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {runLoop,inRacingHours,racingStop,nightDeadline,dayState,runCommand,LOOP} from './update_loop.mjs';
+import {writeLoopSummary,runLoop,inRacingHours,racingStop,nightDeadline,dayState,runCommand,LOOP} from './update_loop.mjs';
 
 const MIN=60000,jst=(h,m=0)=>Date.UTC(2026,9,13,h-9,m);   // JST wall time on 2026-10-13
 function sim({startMs,cycleMs=()=>MIN,outcome=()=>({ok:true,pushed:true}),pagesFail=false,journalPending,overheadMs=0,dispatchMs=0,checkMs=0}){
@@ -178,5 +178,9 @@ for(const pend of [true,false]){let p=pend;const s=sim({startMs:jst(23,20),cycle
  assert.deepEqual(readJournal(jb).entries.kyotei_v8_dev_result_20261013_19_12,entry);assert.equal(readJournal(jb).schema,SCHEMA);
  const wf=fs.readFileSync(p.join(import.meta.dirname,'..','.github/workflows/update-live-odds.yml'),'utf8');
  assert.match(wf,/name: Save pre-close purchase journal\n\s+if: always\(\) && steps\.restore\.outcome == 'success'/);}
+// Loop summary for the hand-over gate.
+{const fs=await import('node:fs'),os=await import('node:os'),p=await import('node:path');const f=p.join(fs.mkdtempSync(p.join(os.tmpdir(),'v8-sum-')),'a','loop.json');
+ const k=writeLoopSummary(f,{reason:'run_time_limit',ok:true,journal_pending:false,cycles:106,succeeded:106,failures:0,elapsed_ms:1,extra:'x'},fs);
+ assert.deepEqual(JSON.parse(fs.readFileSync(f,'utf8')).reason,'run_time_limit');assert.equal(k.extra,undefined);assert.equal(fs.existsSync(f+'.tmp'),false);}
 assert.ok(Object.isFrozen(LOOP));assert.ok(LOOP.hardEndHourJst<24);assert.ok(LOOP.maxRunMs+LOOP.cycleTimeoutMs<=345*MIN);   // regular cycles end by maxRunMs; one journal flush cycle still ends before the 350-min job limit (cache save after)
 console.log('update loop OK: 3-minute cadence, 5.5 h bound, racing-hours stop, late races after 22:00 until last close + result grace, night deadline 23:45 JST for all loop work incl. follow-ups (purchases kept in the journal when cut), single night cycle, failure streak stop, slow and timed-out cycles bounded, Pages dispatch only after a push, process-group timeout, immediate retry after a rejected push, stop on control code change, no surviving child after return, journal flush before ending and failure if it stays pending or cannot be checked');

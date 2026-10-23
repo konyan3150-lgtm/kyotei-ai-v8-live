@@ -50,44 +50,51 @@ export function github({token,repo,request=fetch}){
   if(!/^[\w.-]+\/[\w.-]+$/.test(repo||''))throw Error(`invalid repository ${repo}`);
   const base=`https://api.github.com/repos/${repo}`;
   const headers={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'v8-wake-chain',Authorization:`Bearer ${token}`};
-  const call=async(path,options={})=>{
-    const res=await request(base+path,{...options,headers:{...headers,...(options.body?{'Content-Type':'application/json'}:{})},signal:AbortSignal.timeout(20000)});
+  // Each request times out after 20 s, or earlier when the caller has less time left (timeoutMs, at least 1 s).
+  const call=async(path,options={},timeoutMs)=>{
+    const ms=Math.max(1000,Math.min(20000,Number.isFinite(timeoutMs)?timeoutMs:20000));
+    const res=await request(base+path,{...options,timeout_ms:ms,headers:{...headers,...(options.body?{'Content-Type':'application/json'}:{})},signal:AbortSignal.timeout(ms)});
     if(res.status===204)return null;
     if(!res.ok)throw Object.assign(Error(`GitHub ${options.method||'GET'} ${path.split('?')[0]} HTTP ${res.status}`),{status:res.status});
     return res.json();
   };
   return {
-    runs:async(workflow,query='')=>{const p=await call(`/actions/workflows/${workflow}/runs?branch=main&per_page=50${query}`);if(!Array.isArray(p?.workflow_runs))throw Error('invalid runs response');return p.workflow_runs;},
-    dispatch:async(workflow,inputs)=>call(`/actions/workflows/${workflow}/dispatches`,{method:'POST',body:JSON.stringify({ref:'main',...(inputs?{inputs}:{})})})
+    runs:async(workflow,query='',{timeoutMs}={})=>{const p=await call(`/actions/workflows/${workflow}/runs?branch=main&per_page=50${query}`,{},timeoutMs);if(!Array.isArray(p?.workflow_runs))throw Error('invalid runs response');return p.workflow_runs;},
+    dispatch:async(workflow,inputs,{timeoutMs}={})=>call(`/actions/workflows/${workflow}/dispatches`,{method:'POST',body:JSON.stringify({ref:'main',...(inputs?{inputs}:{})})},timeoutMs),
+    run:async(id,{timeoutMs}={})=>{if(!Number.isSafeInteger(Number(id)))throw Error(`invalid run id ${id}`);const r=await call(`/actions/runs/${Number(id)}`,{},timeoutMs);if(!r||typeof r.status!=='string')throw Error('invalid run response');return r;}
   };
 }
 
 // Waits until a workflow_dispatch run of `workflow` created at/after `since` appears (dispatch confirmed).
-export async function confirmDispatch(gh,workflow,since,{now=Date.now,sleep,confirmMs=DEFAULTS.confirmMs,pollMs=DEFAULTS.pollMs,match=()=>true}={}){
-  const deadline=now()+confirmMs;
+export async function confirmDispatch(gh,workflow,since,{now=Date.now,sleep,confirmMs=DEFAULTS.confirmMs,pollMs=DEFAULTS.pollMs,match=()=>true,deadline=Infinity}={}){
+  // Confirmation ends at confirmMs or at the caller's absolute deadline, whichever comes first; the remaining time is
+  // recomputed before every listing and every sleep, and limits each API call.
+  const end=Math.min(now()+confirmMs,deadline);
   while(true){
+    if(now()>=deadline)throw Object.assign(Error(`dispatch of ${workflow} not confirmed before the deadline`),{confirm:'deadline'});
     // A failed or unreadable listing is "unknown", never "no run": it ends the confirmation (no re-dispatch).
     let runs;
-    try{runs=await gh.runs(workflow,'&event=workflow_dispatch');}
+    try{runs=await gh.runs(workflow,'&event=workflow_dispatch',{timeoutMs:deadline-now()});}
     catch(e){throw Object.assign(Error(`dispatch of ${workflow} could not be confirmed: ${e?.message||e}`),{confirm:'unknown'});}
     const run=runs.find(r=>Date.parse(r.created_at)>=since-5000&&match(r));
     if(run)return run;
-    if(now()>=deadline)throw Object.assign(Error(`dispatch of ${workflow} not confirmed within ${confirmMs/1000}s`),{confirm:'absent'});
-    await sleep(pollMs);
+    if(now()>=end)throw Object.assign(Error(`dispatch of ${workflow} not confirmed within ${Math.round((end-since)/1000)}s`),{confirm:now()>=deadline?'deadline':'absent'});
+    await sleep(Math.max(0,Math.min(pollMs,end-now())));
   }
 }
-
 // Dispatch and confirm. A 5xx (or network error) answer can still have created the run (seen in DEV: HTTP 502 with
 // the run created), so it is not retried blindly: first look for the run. Dispatch once more only when the run list
 // was read successfully until the deadline and showed no such run ('absent'). A failed/invalid list read ('unknown')
 // fails without another dispatch. 4xx answers to the dispatch fail at once. Returns {run, dispatch_errors}.
-export async function dispatchConfirmed(gh,workflow,inputs,{now,sleep,confirmMs,pollMs,match=()=>true,attempts=2}){
+export async function dispatchConfirmed(gh,workflow,inputs,{now,sleep,confirmMs,pollMs,match=()=>true,attempts=2,deadline=Infinity}){
   const errors=[];
   for(let i=1;i<=attempts;i++){
+    // Never dispatch at or after the caller's deadline (also not the second time).
+    if(now()>=deadline)throw Error(`deadline reached before dispatch attempt ${i}${errors.length?` (dispatch errors: ${errors.join('; ')})`:''}`);
     const since=now();
-    try{await gh.dispatch(workflow,inputs);}
+    try{await gh.dispatch(workflow,inputs,{timeoutMs:deadline-now()});}
     catch(e){if(e?.status&&e.status<500)throw e;errors.push(String(e?.message||e));}
-    try{return {run:await confirmDispatch(gh,workflow,since,{now,sleep,confirmMs,pollMs,match}),dispatch_errors:errors};}
+    try{return {run:await confirmDispatch(gh,workflow,since,{now,sleep,confirmMs,pollMs,match,deadline}),dispatch_errors:errors};}
     catch(e){if(e?.confirm!=='absent'||i===attempts)throw Error(`${e.message}${errors.length?` (dispatch errors: ${errors.join('; ')})`:''}`);}
   }
 }
