@@ -69,6 +69,29 @@ for(const conclusion of ['failure','cancelled','timed_out']){
  w.gh.runs=async wf=>{fire();return orig(wf);};w.gh.run=async id=>{fire();return origRun(id);};
  await assert.rejects(handoff({...w,self}),/not reached in time|no time left/);
  assert.ok(w.t-start<=HANDOFF.totalMs-HANDOFF.reserveMs,`took ${(w.t-start)/MIN} min`);assert.ok(w.dispatched.length>=1&&w.dispatched.length<=HANDOFF.maxAttempts);}
+
+// 9) ChatGPT's reproduction: parent done at ~20 min, Recover until ~40 min, the dispatched run never shows up.
+//    Before: confirmation restarted on the re-dispatch (POST again at 43 min, failure at 46 min).
+//    Now: one absolute deadline (45 - 2 min): confirmation stops at 43 min and no POST happens at/after it.
+{const s0=jst(12,20);const w=world({start:s0,runs:{'update.yml':[parentRunning()],'recover.yml':[{id:230,status:'in_progress',created_at:'x'}]},
+  events:[{at:s0+19.9*MIN,do:r=>{r['update.yml'].find(x=>x.id===100).status='completed';r['update.yml'].find(x=>x.id===100).conclusion='success';}},
+          {at:s0+39.9*MIN,do:r=>{r['recover.yml'][0].status='completed';r['recover.yml'][0].conclusion='success';}}],
+  onDispatch:(run,t,runs)=>{runs['update.yml'].splice(runs['update.yml'].indexOf(run),1);}});   // accepted but never listed
+ const posts=[];const orig=w.gh.dispatch;w.gh.dispatch=async(...a)=>{posts.push(w.t);return orig(...a);};
+ await assert.rejects(handoff({...w,self}));
+ const limit=s0+HANDOFF.totalMs-HANDOFF.reserveMs;
+ assert.ok(w.t<=limit,`ended at ${(w.t-s0)/MIN} min`);assert.ok(posts.length>=1&&posts.every(t=>t<limit),'no POST at or after the deadline');}
+// dispatchConfirmed / confirmDispatch with an absolute deadline (the plain wake chain passes none and is unchanged).
+{const {dispatchConfirmed,confirmDispatch,github}=await import('./wake.mjs');
+ let t=1000,posts=0,lists=0;const gh={dispatch:async()=>{posts++;},runs:async()=>{lists++;return [];}};const clk={now:()=>t,sleep:async ms=>{t+=ms;}};
+ await assert.rejects(dispatchConfirmed(gh,'u.yml',undefined,{...clk,confirmMs:180000,pollMs:10000,deadline:1000}),/deadline reached before dispatch/);assert.equal(posts,0);
+ t=0;posts=0;lists=0;await assert.rejects(dispatchConfirmed(gh,'u.yml',undefined,{...clk,confirmMs:180000,pollMs:10000,deadline:60000}),/deadline/);
+ assert.equal(posts,1,'no second POST after the deadline');assert.ok(t<=60000);
+ t=0;lists=0;await assert.rejects(confirmDispatch(gh,'u.yml',0,{...clk,confirmMs:180000,pollMs:10000,deadline:25000}),/deadline/);assert.ok(t<=25000);assert.ok(lists<=4);
+ // API timeouts follow the remaining time (1 s minimum, 20 s maximum).
+ const seen=[];const g=github({token:'t',repo:'o/r',request:async(u,o)=>{seen.push(o.timeout_ms);return {status:200,ok:true,json:async()=>({workflow_runs:[],status:'completed'})};}});
+ await g.runs('u.yml','',{timeoutMs:5000});await g.runs('u.yml');await g.run(1,{timeoutMs:200});await g.run(1,{timeoutMs:99999});
+ assert.deepEqual(seen,[5000,20000,1000,20000]);}
 // The overall budget plus setup fits the waker job limit (60 min in the workflows).
 assert.ok(HANDOFF.totalMs+5*MIN<=60*MIN);
 
@@ -84,4 +107,4 @@ assert.equal(handoffGate({summary:ok,runStartedAt:start,now:jst(21,5),handoffsTo
 assert.equal(handoffGate({summary:ok,runStartedAt:start,now:jst(12,19),handoffsToday:GATE.maxPerDay}).reason,'daily_handoff_limit');
 assert.equal(handoffGate({summary:ok,runStartedAt:start,now:jst(12,19),handoffsToday:NaN}).reason,'handoff_count_unknown');
 assert.equal(handoffGate({summary:null,runStartedAt:start,now:jst(12,19),handoffsToday:0}).reason,'no_loop_summary');
-console.log('handoff OK: stops when another update already runs (also while waiting), no hand-over after an unsuccessful parent, one overall deadline inside the job limit, waits for the parent and an idle group (pending Recover), dispatch accepted vs actually started, re-dispatch only after a cancel-before-start (max 3), already started elsewhere, bounded waits, 502 handling; gate only after a normal run-time-limit stop, same date, before 21:00, max 3/day');
+console.log('handoff OK: stops when another update already runs (also while waiting), no hand-over after an unsuccessful parent, one overall deadline inside the job limit (also for dispatch confirmation and re-dispatch: no POST at or after it, API timeouts from the remaining time), waits for the parent and an idle group (pending Recover), dispatch accepted vs actually started, re-dispatch only after a cancel-before-start (max 3), already started elsewhere, bounded waits, 502 handling; gate only after a normal run-time-limit stop, same date, before 21:00, max 3/day');

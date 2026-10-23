@@ -20,7 +20,7 @@ export const HANDOFF=Object.freeze({totalMs:45*60000,reserveMs:2*60000,parentWai
 // Poll fn until it returns a value, within min(capMs, remaining overall budget).
 async function until(fn,{now,sleep,pollMs,capMs,budget,what}){
   const deadline=Math.min(now()+capMs,budget());
-  while(true){const v=await fn();if(v)return v;if(now()>=deadline)throw Error(`${what} not reached in time`);await sleep(Math.max(0,Math.min(pollMs,deadline-now())));}
+  while(true){if(now()>=budget())throw Error(`${what} not reached in time (overall deadline)`);const v=await fn();if(v)return v;if(now()>=deadline)throw Error(`${what} not reached in time`);await sleep(Math.max(0,Math.min(pollMs,deadline-now())));}
 }
 
 export async function handoff({gh,now=Date.now,sleep,log=()=>{},self,limits={}}){
@@ -35,13 +35,13 @@ export async function handoff({gh,now=Date.now,sleep,log=()=>{},self,limits={}})
   const mine=()=>new Set(out.attempts.map(x=>x.run).filter(Boolean));
   // Another update (not the parent, not ours, not cancelled before doing anything) active or started recently.
   const takenOver=async()=>{
-    const others=(await gh.runs(targetWorkflow)).filter(r=>r.id!==parentRun&&!mine().has(r.id)&&!(r.status==='completed'&&r.conclusion==='cancelled'));
+    const others=(await gh.runs(targetWorkflow,'',{timeoutMs:budget()-now()})).filter(r=>r.id!==parentRun&&!mine().has(r.id)&&!(r.status==='completed'&&r.conclusion==='cancelled'));
     const d=targetDecision(others,now(),{recentMs:L.recentMs});
     return d.decision==='dispatch'?null:d;
   };
   // 1. parent finished, and only a fully successful parent is handed over (its journal save etc. may fail after the loop)
   let parent;
-  try{parent=await until(async()=>{const r=await gh.run(parentRun);return r.status==='completed'?r:null;},{...opt,capMs:L.parentWaitMs,what:'parent run completion'});}
+  try{parent=await until(async()=>{const r=await gh.run(parentRun,{timeoutMs:budget()-now()});return r.status==='completed'?r:null;},{...opt,capMs:L.parentWaitMs,what:'parent run completion'});}
   catch(e){throw fail(e.message);}
   out.parent_conclusion=parent.conclusion;
   if(parent.conclusion!=='success')return {...out,result:'parent_not_successful'};
@@ -51,7 +51,7 @@ export async function handoff({gh,now=Date.now,sleep,log=()=>{},self,limits={}})
     let state;
     try{state=await until(async()=>{
       const t=await takenOver();if(t)return {taken:t};
-      for(const wf of groupWorkflows){const runs=await gh.runs(wf);if(runs.some(r=>ACTIVE.has(r.status)&&r.id!==parentRun))return null;}
+      for(const wf of groupWorkflows){const runs=await gh.runs(wf,'',{timeoutMs:budget()-now()});if(runs.some(r=>ACTIVE.has(r.status)&&r.id!==parentRun))return null;}
       return {idle:true};
     },{...opt,capMs:L.idleWaitMs,what:'idle concurrency group'});}
     catch(e){throw fail(e.message);}
@@ -60,12 +60,12 @@ export async function handoff({gh,now=Date.now,sleep,log=()=>{},self,limits={}})
     // 3. dispatch accepted = a new run exists (confirmation also limited by the remaining budget)
     const left=budget()-now();if(left<=0)throw fail('no time left to dispatch');
     const since=now();let res;
-    try{res=await dispatchConfirmed(gh,targetWorkflow,undefined,{...opt,confirmMs:Math.min(DEFAULTS.confirmMs,left)});}
+    try{res=await dispatchConfirmed(gh,targetWorkflow,undefined,{...opt,confirmMs:DEFAULTS.confirmMs,deadline:budget()});}
     catch(e){throw fail(e.message);}
     a.dispatched_at=new Date(since).toISOString();a.run=res.run.id;if(res.dispatch_errors.length)a.dispatch_errors=res.dispatch_errors;
     // 4. actually started?
     let started;
-    try{started=await until(async()=>{const r=await gh.run(res.run.id);
+    try{started=await until(async()=>{const r=await gh.run(res.run.id,{timeoutMs:budget()-now()});
       if(r.status==='in_progress'||(r.status==='completed'&&r.conclusion!=='cancelled'))return {state:'started',run:r};
       if(r.status==='completed'&&r.conclusion==='cancelled')return {state:'cancelled_before_start',run:r};
       return null;},{...opt,capMs:L.startWaitMs,what:`start of run ${res.run.id}`});}
