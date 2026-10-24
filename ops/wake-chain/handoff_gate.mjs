@@ -5,6 +5,13 @@
 export const GATE=Object.freeze({lastHourJst:21,maxPerDay:3});
 const jstDate=ms=>new Date(ms+9*3600000).toISOString().slice(0,10);
 const jstHour=ms=>new Date(ms+9*3600000).getUTCHours();
+// Hand-overs already made on the JST day of `now`: only workflow_dispatch runs of the hand-over workflow count
+// (push-triggered test runs and anything else do not; 10/23 a push test was counted and used up one of the 3).
+export function countHandoffsToday(runs,now){
+  if(!Array.isArray(runs))throw Error('invalid runs');
+  const today=jstDate(now);
+  return runs.filter(r=>r&&r.event==='workflow_dispatch'&&Number.isFinite(Date.parse(r.created_at))&&jstDate(Date.parse(r.created_at))===today).length;
+}
 export function handoffGate({summary,runStartedAt,now,handoffsToday,gate=GATE}){
   if(!summary||typeof summary!=='object')return {handoff:false,reason:'no_loop_summary'};
   if(summary.reason!=='run_time_limit')return {handoff:false,reason:`loop_stopped_${summary.reason||'unknown'}`};
@@ -27,8 +34,8 @@ if(import.meta.url===`file://${process.argv[1]}`){
     let loop=null;try{loop=JSON.parse(fs.readFileSync(env.LOOP_SUMMARY_FILE,'utf8'));}catch{}
     const gh=github({token:env.GITHUB_TOKEN,repo:env.GITHUB_REPOSITORY}),now=Date.now();
     let handoffsToday=NaN;
-    try{const today=new Date(now+9*3600000).toISOString().slice(0,10);
-      handoffsToday=(await gh.runs(env.HANDOFF_WORKFLOW)).filter(r=>new Date(Date.parse(r.created_at)+9*3600000).toISOString().slice(0,10)===today).length;}catch(e){note('warning','handoff count failed',String(e?.message||e));}
+    try{
+      handoffsToday=countHandoffsToday(await gh.runs(env.HANDOFF_WORKFLOW),now);}catch(e){note('warning','handoff count failed',String(e?.message||e));}
     // DEV tests may lift the hour limit (HANDOFF_TEST_LAST_HOUR_JST); the production workflow never sets it.
     const gate=env.HANDOFF_TEST_LAST_HOUR_JST?{...GATE,lastHourJst:Number(env.HANDOFF_TEST_LAST_HOUR_JST)}:GATE;
     const d=handoffGate({summary:loop,runStartedAt:env.RUN_STARTED_AT,now,handoffsToday,gate});

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {handoff,HANDOFF} from './handoff.mjs';
-import {handoffGate,GATE} from './handoff_gate.mjs';
+import {handoffGate,GATE,countHandoffsToday} from './handoff_gate.mjs';
 
 const MIN=60000,jst=(h,m=0)=>Date.UTC(2026,9,23,h-9,m);
 // Fake GitHub with a clock; runs change state by scripted events at given times.
@@ -107,4 +107,12 @@ assert.equal(handoffGate({summary:ok,runStartedAt:start,now:jst(21,5),handoffsTo
 assert.equal(handoffGate({summary:ok,runStartedAt:start,now:jst(12,19),handoffsToday:GATE.maxPerDay}).reason,'daily_handoff_limit');
 assert.equal(handoffGate({summary:ok,runStartedAt:start,now:jst(12,19),handoffsToday:NaN}).reason,'handoff_count_unknown');
 assert.equal(handoffGate({summary:null,runStartedAt:start,now:jst(12,19),handoffsToday:0}).reason,'no_loop_summary');
-console.log('handoff OK: stops when another update already runs (also while waiting), no hand-over after an unsuccessful parent, one overall deadline inside the job limit (also for dispatch confirmation and re-dispatch: no POST at or after it, API timeouts from the remaining time), waits for the parent and an idle group (pending Recover), dispatch accepted vs actually started, re-dispatch only after a cancel-before-start (max 3), already started elsewhere, bounded waits, 502 handling; gate only after a normal run-time-limit stop, same date, before 21:00, max 3/day');
+// Hand-over count: only workflow_dispatch runs of the same JST day (push tests and the previous day excluded).
+{const at=(d,h,m=0)=>new Date(Date.UTC(2026,9,d,h-9,m)).toISOString();
+ const runs=[{event:'push',created_at:at(23,23,39)},{event:'workflow_dispatch',created_at:at(23,12,20)},{event:'workflow_dispatch',created_at:at(23,23,59)},
+   {event:'workflow_dispatch',created_at:at(24,0,1)},{event:'schedule',created_at:at(23,13)},{event:'workflow_dispatch',created_at:'bad'}];
+ assert.equal(countHandoffsToday(runs,Date.UTC(2026,9,23,14,59)),2);                 // 10/23 23:59 JST: two dispatches that day, push not counted
+ assert.equal(countHandoffsToday(runs,Date.UTC(2026,9,23,15,1)),1);                  // 10/24 00:01 JST: only the 00:01 dispatch
+ assert.equal(countHandoffsToday([{event:'push',created_at:at(23,23,39)}],Date.UTC(2026,9,23,14,40)),0);   // the 10/23 case: was 1, now 0
+ assert.throws(()=>countHandoffsToday(null,0),/invalid runs/);}
+console.log('handoff OK: daily count only from workflow_dispatch runs of the same JST day, stops when another update already runs (also while waiting), no hand-over after an unsuccessful parent, one overall deadline inside the job limit (also for dispatch confirmation and re-dispatch: no POST at or after it, API timeouts from the remaining time), waits for the parent and an idle group (pending Recover), dispatch accepted vs actually started, re-dispatch only after a cancel-before-start (max 3), already started elsewhere, bounded waits, 502 handling; gate only after a normal run-time-limit stop, same date, before 21:00, max 3/day');
